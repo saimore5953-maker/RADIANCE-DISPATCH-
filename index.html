@@ -24,12 +24,10 @@
 
         .mono { font-family: 'JetBrains Mono', monospace; }
 
-        /* Simplified border style */
         .sober-border {
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        /* Standard scrollbar */
         ::-webkit-scrollbar {
             width: 4px;
         }
@@ -55,7 +53,9 @@
     }
     </script>
 </head>
-<body class="antialiased h-screen w-screen relative">
+<body class="antialiased h-screen w-screen relative bg-slate-900">
     <div id="root" class="h-full w-full relative z-10"></div>
+    <!-- CRITICAL: Added entry point script -->
+    <script type="module" src="./index.tsx"></script>
 </body>
 </html>

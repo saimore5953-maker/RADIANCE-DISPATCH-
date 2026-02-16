@@ -10,13 +10,16 @@ import { logger } from "./logger";
 export async function performOCR(base64Image: string): Promise<OCRResult> {
   const settings = settingsService.getSettings();
   
+  // Safe access to process.env to prevent crash in browser environments
+  const envApiKey = typeof process !== 'undefined' ? process.env?.API_KEY : undefined;
+
   // Use custom key if enabled, otherwise fall back to system key
   const apiKey = (settings.useCustomApiKey && settings.customApiKey) 
     ? settings.customApiKey 
-    : process.env.API_KEY;
+    : envApiKey;
 
   if (!apiKey) {
-    throw new Error("Gemini API Key is not configured.");
+    throw new Error("Gemini API Key is not configured. Please check your settings or environment variables.");
   }
 
   logger.info(settings.useCustomApiKey ? 'Performing OCR with custom user API key.' : 'Performing OCR with system API key.');
