@@ -5,12 +5,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>RADIANCE DISPATCH</title>
-    <!-- Add inline favicon to resolve the 404 error -->
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📦</text></svg>">
+    
+    <!-- Fix for the 404 error: Provide a data-URI favicon and explicitly declare rel attributes -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📦</text></svg>">
+    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAADBJREFUOE9jZKAQMFKon2HUAIYhA0Z9MAyDByM+GIYhA0Z9MAyDByM+GIYhA0Z9MAwDAL78EAF9669ZAAAAAElFTkSuQmCC">
+    <link rel="shortcut icon" href="data:image/x-icon;," type="image/x-icon"> 
     
     <!-- Tailwind Play CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
+      // Configure Tailwind to optimize performance and handle the custom theme
       tailwind.config = {
         theme: {
           extend: {
