@@ -20,7 +20,7 @@ const defaultSettings: AppSettings = {
   spreadsheetUrl: APP_CONFIG.SPREADSHEET_URL,
   webhookUrl: APP_CONFIG.DEFAULT_WEBHOOK_URL,
   showOcrViewport: true,
-  ocrTimeoutSec: 5,
+  ocrTimeoutSec: 10, // Updated default to 10s
   autoOpenExcel: true,
   largeButtons: false,
   useCustomApiKey: false,
@@ -32,7 +32,8 @@ export const settingsService = {
     const saved = localStorage.getItem(SETTINGS_KEY);
     if (!saved) return defaultSettings;
     try {
-      return { ...defaultSettings, ...JSON.parse(saved) };
+      const parsed = JSON.parse(saved);
+      return { ...defaultSettings, ...parsed };
     } catch {
       return defaultSettings;
     }

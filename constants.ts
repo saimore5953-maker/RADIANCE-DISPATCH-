@@ -1,6 +1,6 @@
 
 export const APP_CONFIG = {
-  OCR_TIMEOUT_MS: 5000,
+  OCR_TIMEOUT_MS: 10000, // Default fallback, but settings should override
   DUPLICATE_WINDOW_MS: 5000,
   DAILY_PREFIX: 'DSP',
   SPREADSHEET_URL: "https://docs.google.com/spreadsheets/d/1MWsjA8DhP_EbmZpDGJi5UZPv3Q0q33TJziXNBPiYk_Q/edit?gid=0#gid=0",

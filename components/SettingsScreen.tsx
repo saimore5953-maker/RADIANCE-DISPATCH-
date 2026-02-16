@@ -18,6 +18,7 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
     const newSettings = { ...settings, [key]: value };
     setSettings(newSettings);
     settingsService.saveSettings(newSettings);
+    triggerToast("Setting Updated");
   };
 
   const handleSaveApiKey = () => {
@@ -142,7 +143,7 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
             <div className="p-4 flex items-center justify-between border-b border-slate-50">
               <div className="flex items-center gap-3">
                 <div className="bg-emerald-50 text-emerald-600 p-2 rounded-xl">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1.01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                 </div>
                 <div>
                   <p className="text-sm font-bold text-slate-800">Enable Upload to Sheet</p>
@@ -156,7 +157,7 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
                   checked={settings.enableSheetsUpload}
                   onChange={(e) => updateSetting('enableSheetsUpload', e.target.checked)}
                 />
-                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
               </label>
             </div>
             
@@ -204,7 +205,7 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
                   checked={settings.showOcrViewport}
                   onChange={(e) => updateSetting('showOcrViewport', e.target.checked)}
                 />
-                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
               </label>
             </div>
             
@@ -214,7 +215,7 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
                 <input 
                   type="range"
                   min="3"
-                  max="15"
+                  max="30"
                   step="1"
                   value={settings.ocrTimeoutSec}
                   onChange={(e) => updateSetting('ocrTimeoutSec', parseInt(e.target.value))}
@@ -233,7 +234,7 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
             <div className="p-4 flex items-center justify-between border-b border-slate-50">
               <div className="flex items-center gap-3">
                 <div className="bg-amber-50 text-amber-600 p-2 rounded-xl">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1.01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                 </div>
                 <div>
                   <p className="text-sm font-bold text-slate-800">Auto-open Excel</p>
@@ -247,7 +248,7 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
                   checked={settings.autoOpenExcel}
                   onChange={(e) => updateSetting('autoOpenExcel', e.target.checked)}
                 />
-                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
               </label>
             </div>
 
@@ -268,7 +269,7 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
                   checked={settings.largeButtons}
                   onChange={(e) => updateSetting('largeButtons', e.target.checked)}
                 />
-                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
               </label>
             </div>
           </div>

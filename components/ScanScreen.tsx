@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { dbService } from '../services/database';
 import { performOCR } from '../services/gemini';
 import { Dispatch, ScanRecord, ScanStatus, PartSummary, DispatchStatus } from '../types';
+import { settingsService } from '../services/settingsService';
 import { logger } from '../services/logger';
 
 interface Props {
@@ -19,6 +20,7 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [lastScan, setLastScan] = useState<ScanRecord | null>(null);
+  const [settings] = useState(() => settingsService.getSettings());
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -75,7 +77,7 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
       return;
     }
     
-    // PATCH 2: DOWNSCALE IMAGE BEFORE OCR (Target 1024px long edge)
+    // Resize image logic
     const videoWidth = videoRef.current.videoWidth;
     const videoHeight = videoRef.current.videoHeight;
     const MAX_EDGE = 1024;
@@ -100,14 +102,13 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
     
     const base64 = canvasRef.current.toDataURL('image/jpeg', 0.8).split(',')[1];
 
-    // PATCH 2: ADD TIMEOUT (5s)
-    const ocrPromise = performOCR(base64);
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error("OCR_TIMEOUT")), 5000)
-    );
+    // Logging timeout as requested
+    console.log("OCR timeout seconds =", settings.ocrTimeoutSec);
+    logger.info(`Starting OCR with ${settings.ocrTimeoutSec}s timeout`);
 
     try {
-      const ocrResult = await Promise.race([ocrPromise, timeoutPromise]) as any;
+      // performOCR service internally handles the settings-based timeout via AbortController
+      const ocrResult = await performOCR(base64);
       
       const newScan: ScanRecord = {
         id: crypto.randomUUID(),
@@ -131,8 +132,9 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
         setTimeout(() => { if (isMounted.current) setLastScan(null); }, 3000);
       }
     } catch (err: any) {
-      if (err.message === "OCR_TIMEOUT") {
-        alert("OCR taking too long. Please try again.");
+      const isTimeout = err.name === 'AbortError' || err.message?.includes('aborted') || err.message === 'OCR_TIMEOUT';
+      if (isTimeout) {
+        alert(`OCR taking too long (exceeded ${settings.ocrTimeoutSec}s). Please try again.`);
       } else {
         alert(err.message || "Detection failed.");
       }
@@ -143,7 +145,7 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
 
   return (
     <div className="flex-1 flex flex-col bg-slate-900 h-screen w-full relative select-none overflow-hidden">
-      {/* PATCH 3: FULL AVAILABLE SPACE FOR PREVIEW */}
+      {/* SCANNER VIEWPORT */}
       <div className="flex-1 relative bg-black overflow-hidden flex flex-col">
         <video 
           ref={videoRef} 
@@ -154,16 +156,17 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
         />
         <canvas ref={canvasRef} className="hidden" />
         
-        {/* Simple Targeting Overlay */}
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-12">
-          <div className="w-full aspect-[4/3] border-2 border-white/20 rounded-2xl relative">
-            {/* Viewport Accent corners */}
-            <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-blue-500 rounded-tl-sm"></div>
-            <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-blue-500 rounded-tr-sm"></div>
-            <div className="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-blue-500 rounded-bl-sm"></div>
-            <div className="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-blue-500 rounded-br-sm"></div>
+        {/* Targeting Overlay (Controlled by Settings) */}
+        {settings.showOcrViewport && (
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-12">
+            <div className="w-full aspect-[4/3] border-2 border-white/20 rounded-2xl relative">
+              <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-blue-500 rounded-tl-sm"></div>
+              <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-blue-500 rounded-tr-sm"></div>
+              <div className="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-blue-500 rounded-bl-sm"></div>
+              <div className="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-blue-500 rounded-br-sm"></div>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Top Actions */}
         <div className="absolute top-6 inset-x-6 flex justify-between items-center z-20">
@@ -180,7 +183,7 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
           </button>
         </div>
 
-        {/* OCR Overlay feedback */}
+        {/* Processing Indicator */}
         {isProcessing && (
           <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px] z-30 flex items-center justify-center">
             <div className="bg-slate-900/80 p-6 rounded-3xl border border-white/10 flex flex-col items-center gap-4 animate-in zoom-in duration-200">
@@ -190,6 +193,7 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
           </div>
         )}
 
+        {/* Captured Feedback */}
         {lastScan && !isProcessing && (
           <div className="absolute bottom-6 inset-x-6 z-20">
             <div className="alert bg-blue-600 text-white border-none shadow-2xl animate-in slide-in-from-bottom duration-300">
@@ -203,8 +207,14 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
         )}
       </div>
 
-      {/* Control Area - Compact and gap-free */}
-      <div className="bg-slate-900 px-8 py-6 flex flex-col items-center border-t border-white/5 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-40">
+      {/* Control Area */}
+      <div className="bg-slate-900 px-8 py-4 flex flex-col items-center border-t border-white/5 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-40">
+        
+        {/* Diagnostic Timeout Line (Subtle) */}
+        <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-3 opacity-60">
+          OCR timeout: {settings.ocrTimeoutSec}s
+        </p>
+
         <button 
           onClick={captureAndScan}
           disabled={isProcessing}
@@ -221,7 +231,7 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
 
         <button 
           onClick={() => onComplete(dispatch.dispatch_id)}
-          className="btn btn-ghost btn-block mt-4 text-slate-400 text-[10px] font-black tracking-widest uppercase hover:bg-white/5 h-10 min-h-0"
+          className="btn btn-ghost btn-block mt-3 text-slate-400 text-[10px] font-black tracking-widest uppercase hover:bg-white/5 h-10 min-h-0"
         >
           Review Dispatch
         </button>
