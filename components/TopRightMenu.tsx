@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { APP_CONFIG } from '../constants';
+import { settingsService } from '../services/settingsService';
+import { logger } from '../services/logger';
 
 interface Props {
   onOpenSettings: () => void;
@@ -22,11 +23,14 @@ const TopRightMenu: React.FC<Props> = ({ onOpenSettings, onLogout }) => {
   }, []);
 
   const handleOpenSpreadsheet = () => {
-    if (!APP_CONFIG.SPREADSHEET_URL) {
-      alert("Spreadsheet URL not configured");
+    const { spreadsheetUrl } = settingsService.getSettings();
+    if (!spreadsheetUrl) {
+      alert("Spreadsheet URL not configured in Settings.");
+      logger.warn('Attempted to open spreadsheet, but URL is not configured.');
       return;
     }
-    window.open(APP_CONFIG.SPREADSHEET_URL, '_blank');
+    logger.info('Opening spreadsheet.', { url: spreadsheetUrl });
+    window.open(spreadsheetUrl, '_blank');
     setIsOpen(false);
   };
 

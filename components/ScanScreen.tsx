@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { dbService } from '../services/database';
 import { performOCR } from '../services/gemini';
 import { Dispatch, ScanRecord, ScanStatus, PartSummary, DispatchStatus } from '../types';
+import { logger } from '../services/logger';
 
 interface Props {
   dispatch: Dispatch;
@@ -46,17 +47,18 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
 
   const stopCamera = useCallback(() => {
     if (videoRef.current && videoRef.current.srcObject) {
+      logger.debug('Stopping camera stream.');
       const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-      tracks.forEach(track => {
-        track.stop();
-      });
+      tracks.forEach(track => track.stop());
       videoRef.current.srcObject = null;
     }
   }, []);
 
   const startCamera = useCallback(async () => {
+    logger.debug('Attempting to start camera.');
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setErrorMsg("Camera access requires a secure (HTTPS) connection or a modern browser.");
+      logger.error('Camera API not available.');
       return;
     }
 
@@ -77,17 +79,19 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
           videoRef.current.srcObject = stream;
           success = true;
           setErrorMsg(null);
+          logger.info('Camera started successfully.');
           break; 
         } else {
           stream.getTracks().forEach(t => t.stop());
         }
       } catch (err: any) {
-        console.warn(`Constraint attempt failed (${err.name}):`, constraints);
+        logger.warn(`Camera constraint attempt failed.`, { error: err.name, constraints });
       }
     }
 
     if (!success) {
       setErrorMsg("Could not connect to any camera. Please check permissions.");
+      logger.error('All camera constraints failed.');
     }
   }, [stopCamera]);
 
@@ -143,6 +147,7 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
       };
       await saveScan(newScan);
     } catch (err: any) {
+      logger.error('OCR or Save process failed.', err);
       alert(err.message || "Cloud Detection failed. Try manual entry.");
     } finally {
       setIsProcessing(false);
@@ -150,10 +155,16 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
   };
 
   const saveScan = async (scan: ScanRecord) => {
-    await dbService.addScan(scan);
-    setLastScan(scan);
-    loadData();
-    setTimeout(() => setLastScan(null), 3000);
+    try {
+      await dbService.addScan(scan);
+      logger.info('Scan saved to DB.', { dispatch_id: scan.dispatch_id, part_no: scan.part_no });
+      setLastScan(scan);
+      loadData();
+      setTimeout(() => setLastScan(null), 3000);
+    } catch (err) {
+      logger.error('Failed to save scan to database.', err);
+      alert('Error: Could not save scan. Device storage might be full.');
+    }
   };
 
   const handleDiscard = async () => {

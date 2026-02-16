@@ -10,6 +10,7 @@ import DispatchDetailScreen from './components/DispatchDetailScreen';
 import CustomerSelectionScreen from './components/CustomerSelectionScreen';
 import LogisticsDetailsScreen from './components/LogisticsDetailsScreen';
 import SettingsScreen from './components/SettingsScreen';
+import { logger } from './services/logger';
 
 const App: React.FC = () => {
   const [auth, setAuth] = useState<AuthState>({ operatorId: null, isLoggedIn: false });
@@ -22,20 +23,26 @@ const App: React.FC = () => {
   const [tempCustomer, setTempCustomer] = useState<string | null>(null);
 
   useEffect(() => {
-    dbService.init().then(() => setIsDbReady(true));
+    dbService.init().then(() => {
+      setIsDbReady(true);
+      logger.info('Database initialized successfully.');
+    }).catch(err => logger.error('Database initialization failed.', err));
   }, []);
 
   const handleLogin = (id: string) => {
+    logger.info(`Operator logged in: ${id}`);
     setAuth({ operatorId: id, isLoggedIn: true });
     setCurrentView('HOME');
   };
 
   const handleLogout = () => {
+    logger.info(`Operator logged out: ${auth.operatorId}`);
     setAuth({ operatorId: null, isLoggedIn: false });
     setCurrentView('LOGIN');
   };
 
   const initiateNewDispatch = () => {
+    logger.info('Initiating new dispatch flow.');
     setCurrentView('CUSTOMER_SELECT');
   };
 
@@ -69,7 +76,8 @@ const App: React.FC = () => {
       total_qty_cached: 0,
       parts_count_cached: 0,
     };
-
+    
+    logger.info('Creating new dispatch record.', { dispatch_id: newDispatch.dispatch_id });
     await dbService.createDispatch(newDispatch);
     setActiveDispatch(newDispatch);
     setCurrentView('SCAN');
@@ -77,6 +85,7 @@ const App: React.FC = () => {
   };
 
   const resumeDispatch = (dispatch: Dispatch) => {
+    logger.info(`Resuming DRAFT dispatch.`, { dispatch_id: dispatch.dispatch_id });
     setActiveDispatch(dispatch);
     setCurrentView('SCAN');
   };
@@ -84,6 +93,7 @@ const App: React.FC = () => {
   const viewHistory = () => setCurrentView('HISTORY');
   
   const viewDetail = (id: string) => {
+    logger.info(`Viewing details for dispatch.`, { dispatch_id: id });
     setSelectedDispatchId(id);
     setCurrentView('DETAIL');
   };
