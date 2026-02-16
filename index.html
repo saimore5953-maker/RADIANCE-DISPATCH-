@@ -4,68 +4,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>RADIANCE DISPATCH | DIGITAL HUD</title>
+    <title>RADIANCE DISPATCH</title>
     
     <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
     
     <style>
-        :root {
-            --neon-blue: #3b82f6;
-            --neon-glow: rgba(59, 130, 246, 0.5);
-        }
-
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #020617;
+            background-color: #0f172a; /* Slate 900 */
             color: #f8fafc;
             overflow: hidden;
             -webkit-tap-highlight-color: transparent;
         }
 
-        /* Digital Grid Background */
-        .digital-bg {
-            background-image: 
-                linear-gradient(rgba(59, 130, 246, 0.05) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(59, 130, 246, 0.05) 1px, transparent 1px);
-            background-size: 30px 30px;
-            background-position: center center;
-        }
-
-        /* Scanline Effect */
-        .scanlines::after {
-            content: " ";
-            display: block;
-            position: absolute;
-            top: 0; left: 0; bottom: 0; right: 0;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), 
-                        linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
-            z-index: 200;
-            background-size: 100% 4px, 3px 100%;
-            pointer-events: none;
-            opacity: 0.3;
-        }
-
         .mono { font-family: 'JetBrains Mono', monospace; }
 
-        .tech-border {
-            border: 1px solid rgba(59, 130, 246, 0.3);
-            box-shadow: 0 0 15px rgba(59, 130, 246, 0.1);
+        /* Simplified border style */
+        .sober-border {
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        @keyframes pulse-glow {
-            0% { box-shadow: 0 0 5px var(--neon-glow); }
-            50% { box-shadow: 0 0 20px var(--neon-glow); }
-            100% { box-shadow: 0 0 5px var(--neon-glow); }
+        /* Standard scrollbar */
+        ::-webkit-scrollbar {
+            width: 4px;
         }
-
-        .btn-digital {
-            animation: pulse-glow 3s infinite;
-            text-shadow: 0 0 8px rgba(255,255,255,0.5);
+        ::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.1);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
         }
     </style>
     
@@ -82,7 +55,7 @@
     }
     </script>
 </head>
-<body class="antialiased h-screen w-screen relative scanlines digital-bg">
+<body class="antialiased h-screen w-screen relative">
     <div id="root" class="h-full w-full relative z-10"></div>
 </body>
 </html>
