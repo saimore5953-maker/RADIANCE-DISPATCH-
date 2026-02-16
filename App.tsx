@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { dbService } from './services/database';
-import { AuthState, Dispatch, DispatchStatus, ScanRecord, PartSummary } from './types';
+import { AuthState, Dispatch, DispatchStatus } from './types';
 import LoginScreen from './components/LoginScreen';
 import HomeScreen from './components/HomeScreen';
 import ScanScreen from './components/ScanScreen';
@@ -18,33 +18,26 @@ const App: React.FC = () => {
   const [activeDispatch, setActiveDispatch] = useState<Dispatch | null>(null);
   const [selectedDispatchId, setSelectedDispatchId] = useState<string | null>(null);
   const [isDbReady, setIsDbReady] = useState(false);
-  
-  // Temporary storage during flow
   const [tempCustomer, setTempCustomer] = useState<string | null>(null);
 
   useEffect(() => {
     dbService.init().then(() => {
       setIsDbReady(true);
-      logger.info('Database initialized successfully.');
-    }).catch(err => logger.error('Database initialization failed.', err));
+      logger.info('Digital Core initialized.');
+    }).catch(err => logger.error('Core init failed.', err));
   }, []);
 
   const handleLogin = (id: string) => {
-    logger.info(`Operator logged in: ${id}`);
     setAuth({ operatorId: id, isLoggedIn: true });
     setCurrentView('HOME');
   };
 
   const handleLogout = () => {
-    logger.info(`Operator logged out: ${auth.operatorId}`);
     setAuth({ operatorId: null, isLoggedIn: false });
     setCurrentView('LOGIN');
   };
 
-  const initiateNewDispatch = () => {
-    logger.info('Initiating new dispatch flow.');
-    setCurrentView('CUSTOMER_SELECT');
-  };
+  const initiateNewDispatch = () => setCurrentView('CUSTOMER_SELECT');
 
   const handleCustomerSelected = (name: string) => {
     setTempCustomer(name);
@@ -53,7 +46,6 @@ const App: React.FC = () => {
 
   const finalizeCreateDispatch = async (logistics: { driver_name: string; driver_mobile: string; vehicle_no: string; lr_no: string }) => {
     if (!tempCustomer) return;
-
     const nextNo = await dbService.getNextDispatchNo();
     const date = new Date();
     const dateKey = date.toISOString().slice(0, 10).replace(/-/g, '');
@@ -77,7 +69,6 @@ const App: React.FC = () => {
       parts_count_cached: 0,
     };
     
-    logger.info('Creating new dispatch record.', { dispatch_id: newDispatch.dispatch_id });
     await dbService.createDispatch(newDispatch);
     setActiveDispatch(newDispatch);
     setCurrentView('SCAN');
@@ -85,91 +76,53 @@ const App: React.FC = () => {
   };
 
   const resumeDispatch = (dispatch: Dispatch) => {
-    logger.info(`Resuming DRAFT dispatch.`, { dispatch_id: dispatch.dispatch_id });
     setActiveDispatch(dispatch);
     setCurrentView('SCAN');
   };
 
-  const viewHistory = () => setCurrentView('HISTORY');
-  
-  const viewDetail = (id: string) => {
-    logger.info(`Viewing details for dispatch.`, { dispatch_id: id });
-    setSelectedDispatchId(id);
-    setCurrentView('DETAIL');
-  };
-
-  const viewSummary = (id: string) => {
-    setSelectedDispatchId(id);
-    setCurrentView('SUMMARY');
-  };
-
   if (!isDbReady) {
     return (
-      <div className="flex items-center justify-center h-screen bg-slate-900 text-white">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-lg font-medium uppercase tracking-widest">RADIANCE DISPATCH</p>
-          <p className="text-slate-400 text-xs mt-2 italic">Loading Secure Database...</p>
+      <div className="flex items-center justify-center h-screen w-full bg-slate-950">
+        <div className="text-center relative">
+          <div className="loading loading-spinner loading-lg text-primary mb-6"></div>
+          <p className="text-xl font-black uppercase tracking-[0.4em] text-white">Radiance</p>
+          <div className="h-[2px] w-24 bg-primary/20 mx-auto mt-2 overflow-hidden relative">
+             <div className="absolute inset-0 bg-primary w-1/2 animate-[slide_2s_infinite]"></div>
+          </div>
+          <p className="text-[8px] text-primary font-bold uppercase tracking-widest mt-4 opacity-40 italic">Booting Industrial Protocol...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-md mx-auto h-screen bg-white shadow-2xl overflow-hidden flex flex-col relative">
+    <div className="max-w-md mx-auto h-screen w-full overflow-hidden flex flex-col relative bg-transparent">
       {currentView === 'LOGIN' && <LoginScreen onLogin={handleLogin} />}
-      
       {currentView === 'HOME' && (
         <HomeScreen 
           operatorId={auth.operatorId!} 
           onStart={initiateNewDispatch} 
-          onHistory={viewHistory}
+          onHistory={() => setCurrentView('HISTORY')}
           onLogout={handleLogout}
           onOpenSettings={() => setCurrentView('SETTINGS')}
         />
       )}
-
-      {currentView === 'SETTINGS' && (
-        <SettingsScreen onBack={() => setCurrentView('HOME')} />
-      )}
-
-      {currentView === 'CUSTOMER_SELECT' && (
-        <CustomerSelectionScreen 
-          onSelect={handleCustomerSelected}
-          onBack={() => setCurrentView('HOME')}
-        />
-      )}
-
-      {currentView === 'LOGISTICS_DETAILS' && (
-        <LogisticsDetailsScreen 
-          onComplete={finalizeCreateDispatch}
-          onBack={() => setCurrentView('CUSTOMER_SELECT')}
-        />
-      )}
-
-      {currentView === 'SCAN' && activeDispatch && (
-        <ScanScreen 
-          dispatch={activeDispatch} 
-          onBack={() => setCurrentView('HOME')}
-          onComplete={(id) => viewDetail(id)}
-        />
-      )}
-
+      {currentView === 'SETTINGS' && <SettingsScreen onBack={() => setCurrentView('HOME')} />}
+      {currentView === 'CUSTOMER_SELECT' && <CustomerSelectionScreen onSelect={handleCustomerSelected} onBack={() => setCurrentView('HOME')} />}
+      {currentView === 'LOGISTICS_DETAILS' && <LogisticsDetailsScreen onComplete={finalizeCreateDispatch} onBack={() => setCurrentView('CUSTOMER_SELECT')} />}
+      {currentView === 'SCAN' && activeDispatch && <ScanScreen dispatch={activeDispatch} onBack={() => setCurrentView('HOME')} onComplete={(id) => { setSelectedDispatchId(id); setCurrentView('DETAIL'); }} />}
       {currentView === 'HISTORY' && (
         <HistoryScreen 
           operatorId={auth.operatorId!}
           onBack={() => setCurrentView('HOME')}
-          onSelect={viewDetail}
+          onSelect={(id) => { setSelectedDispatchId(id); setCurrentView('DETAIL'); }}
           onResume={resumeDispatch}
         />
       )}
-
-      {(currentView === 'DETAIL' || currentView === 'SUMMARY') && selectedDispatchId && (
+      {currentView === 'DETAIL' && selectedDispatchId && (
         <DispatchDetailScreen 
           dispatchId={selectedDispatchId} 
-          isFinalizedView={currentView === 'SUMMARY'}
-          onBack={() => currentView === 'SUMMARY' ? setCurrentView('HOME') : setCurrentView('HISTORY')}
-          onNewDispatch={initiateNewDispatch}
+          onBack={() => setCurrentView('HISTORY')}
           onContinueScanning={resumeDispatch}
         />
       )}

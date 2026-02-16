@@ -5,40 +5,33 @@ import { settingsService } from "./settingsService";
 import { logger } from "./logger";
 
 /**
- * Cloud OCR Service (Gemini 3 Flash)
- * Restored version for high-accuracy industrial tag extraction.
+ * Cloud OCR Service (Restored to direct client-side calling)
  */
 export async function performOCR(base64Image: string): Promise<OCRResult> {
   const settings = settingsService.getSettings();
   
-  const activeApiKey = (settings.useCustomApiKey && settings.customApiKey) 
+  // Use custom key if enabled, otherwise fall back to system key
+  const apiKey = (settings.useCustomApiKey && settings.customApiKey) 
     ? settings.customApiKey 
     : process.env.API_KEY;
 
-  if (!activeApiKey) {
-    throw new Error("API Key not configured. Please check Settings.");
+  if (!apiKey) {
+    throw new Error("Gemini API Key is not configured.");
   }
 
-  const ai = new GoogleGenAI({ apiKey: activeApiKey });
+  logger.info(settings.useCustomApiKey ? 'Performing OCR with custom user API key.' : 'Performing OCR with system API key.');
   
+  const ai = new GoogleGenAI({ apiKey });
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), settings.ocrTimeoutSec * 1000);
 
   try {
-    logger.info('Performing cloud OCR with Gemini.');
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: {
         parts: [
-          {
-            inlineData: {
-              mimeType: 'image/jpeg',
-              data: base64Image,
-            },
-          },
-          {
-            text: 'Extract the Part Number, Part Name, and Quantity from this industrial dispatch tag. Look for anchors like "PART NO", "PART NAME", and "QTY" or "NOS". Return JSON.',
-          },
+          { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
+          { text: 'Extract the Part Number, Part Name, and Quantity from this industrial dispatch tag. Look for anchors like "PART NO", "PART NAME", and "QTY" or "NOS". Return JSON.' },
         ],
       },
       config: {
@@ -46,18 +39,9 @@ export async function performOCR(base64Image: string): Promise<OCRResult> {
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            partNo: { 
-              type: Type.STRING,
-              description: "The alphanumeric part number"
-            },
-            partName: { 
-              type: Type.STRING,
-              description: "The descriptive part name"
-            },
-            qty: { 
-              type: Type.INTEGER,
-              description: "The numeric quantity"
-            }
+            partNo: { type: Type.STRING },
+            partName: { type: Type.STRING },
+            qty: { type: Type.INTEGER }
           },
           required: ["partNo", "partName", "qty"]
         }
@@ -65,9 +49,8 @@ export async function performOCR(base64Image: string): Promise<OCRResult> {
     }, { signal: controller.signal });
 
     clearTimeout(timeoutId);
-    
     const data = JSON.parse(response.text || "{}");
-    logger.info('OCR successful.', data);
+    
     return {
       partNo: data.partNo || "UNKNOWN",
       partName: data.partName || "UNKNOWN",
@@ -77,16 +60,7 @@ export async function performOCR(base64Image: string): Promise<OCRResult> {
     };
   } catch (err: any) {
     clearTimeout(timeoutId);
-    logger.error("OCR API Error", err);
-
-    if (err.name === 'AbortError') {
-      throw new Error(`OCR timed out after ${settings.ocrTimeoutSec}s. Check connection.`);
-    }
-    
-    if (err.message?.includes('API_KEY_INVALID') || err.message?.includes('API key not found')) {
-      throw new Error("API Key may be invalid. Update it in Settings.");
-    }
-    
-    throw new Error("Cloud OCR failed. Check connection or use Manual Entry.");
+    logger.error("OCR Service Error", err);
+    throw new Error(err.message || "Failed to process image with Gemini AI.");
   }
 }
