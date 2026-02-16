@@ -136,7 +136,7 @@ const DispatchDetailScreen: React.FC<Props> = ({
     const webhookUrl = settings.webhookUrl;
 
     if (!webhookUrl) {
-      alert("Webhook URL not configured.");
+      alert("Webhook URL not configured in Settings.");
       return;
     }
 
@@ -146,7 +146,7 @@ const DispatchDetailScreen: React.FC<Props> = ({
 
     setIsUploading(true);
     
-    // RESTORED PAYLOAD: Use raw ISO string for completed_at as it was working smoothly before.
+    // PAYLOAD: Sending raw ISO strings for dates as requested for maximum reliability.
     const payload = {
       dispatch_no: dispatch.dispatch_no,
       dispatch_id: dispatch.dispatch_id,
@@ -165,19 +165,19 @@ const DispatchDetailScreen: React.FC<Props> = ({
       }))
     };
 
-    logger.info('Attempting upload to sheet...', { dispatch_id: dispatch.dispatch_id });
+    logger.info('Initiating spreadsheet upload...', { dispatch_id: dispatch.dispatch_id });
 
     try {
-      // MINIMAL RESTORE: Using simple fetch with mode: 'no-cors' 
-      // This is the most compatible way to hit Google Apps Script /exec endpoints.
+      // MODE: 'no-cors' is mandatory for Google Apps Script to work across all mobile browsers.
+      // HEADERS: 'text/plain' prevents the browser from sending an OPTIONS preflight request.
       await fetch(webhookUrl, {
         method: 'POST',
         mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify(payload)
       });
 
-      // In no-cors mode, the request is "fire and forget" from the browser's perspective.
-      // We assume it sent successfully if no exception was thrown during fetch invocation.
+      // In no-cors mode, the response is opaque. If fetch doesn't throw, we assume success.
       const updated = { 
         ...dispatch, 
         sheets_synced: true, 
@@ -187,9 +187,9 @@ const DispatchDetailScreen: React.FC<Props> = ({
       
       if (isMounted.current) {
         setDispatch(updated);
-        showToast("Upload requested", "success");
+        showToast("Upload requested successfully", "success");
       }
-      logger.info('Upload triggered (Success state assumed).');
+      logger.info('Upload triggered successfully (no-cors mode).');
     } catch (err: any) {
       logger.error('Upload failed.', err);
       showToast(`Upload failed: ${err.message || 'Network error'}`, "error");
@@ -206,7 +206,7 @@ const DispatchDetailScreen: React.FC<Props> = ({
         </div>
       )}
 
-      <div className="navbar bg-slate-800 border-b border-white/5 px-4 h-16 z-30">
+      <div className="navbar bg-slate-800 border-b border-white/5 px-4 h-16 z-30 shadow-md">
         <div className="flex-none">
           <button onClick={onBack} className="btn btn-ghost btn-circle text-white">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
