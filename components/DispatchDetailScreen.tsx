@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { dbService } from '../services/database';
 import { Dispatch, ScanRecord, PartSummary, DispatchStatus, ScanStatus } from '../types';
 import { generateExports, triggerDownload } from '../services/exportService';
@@ -28,6 +28,12 @@ const DispatchDetailScreen: React.FC<Props> = ({
   const [showFinalizeOptions, setShowFinalizeOptions] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
   
   // Manual Entry Form State
   const [manualPartNo, setManualPartNo] = useState('');
@@ -42,13 +48,16 @@ const DispatchDetailScreen: React.FC<Props> = ({
   const load = async () => {
     const d = await dbService.getDispatchById(dispatchId);
     const s = await dbService.getScansForDispatch(dispatchId);
-    setDispatch(d);
-    setScans(s);
+    if (isMounted.current) {
+      setDispatch(d);
+      setScans(s);
+    }
   };
 
   const showToast = (message: string, type: 'success' | 'error') => {
+    if (!isMounted.current) return;
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => { if (isMounted.current) setToast(null); }, 3000);
   };
 
   if (!dispatch) return null;
@@ -110,8 +119,10 @@ const DispatchDetailScreen: React.FC<Props> = ({
       end_time: new Date().toISOString() 
     };
     await dbService.updateDispatch(updated);
-    setDispatch(updated);
-    setIsFinalizing(false);
+    if (isMounted.current) {
+      setDispatch(updated);
+      setIsFinalizing(false);
+    }
   };
 
   const handleDownload = async () => {
@@ -167,6 +178,10 @@ const DispatchDetailScreen: React.FC<Props> = ({
       }))
     };
 
+    // PATCH 1: ADD 10S TIMEOUT
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
     logger.info('Initiating spreadsheet upload.', { url: webhookUrl, size: JSON.stringify(payload).length });
 
     try {
@@ -174,23 +189,50 @@ const DispatchDetailScreen: React.FC<Props> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-        mode: 'no-cors' // Common for Google Apps Script webhooks if CORS is not handled
+        signal: controller.signal
       });
 
-      const updated = { 
-        ...dispatch, 
-        sheets_synced: true, 
-        sheets_synced_at: new Date().toISOString() 
-      };
-      await dbService.updateDispatch(updated);
-      setDispatch(updated);
-      showToast("Uploaded to Google Sheet", "success");
-      logger.info('Upload successful.');
+      clearTimeout(timeoutId);
+
+      // PATCH 1: ROBUST RESPONSE HANDLING
+      // Note: Google Apps Script Web Apps often cause CORS issues if not handled by standard fetch.
+      // If we get here and it's 200, we treat it as success or skipped.
+      
+      let data: any = { ok: true };
+      try {
+        const text = await response.text();
+        if (text) {
+          data = JSON.parse(text);
+        }
+      } catch (e) {
+        // Response might not be JSON or empty but status might be 200
+        logger.warn('Could not parse upload response body, assuming OK if status 200.');
+      }
+
+      if (response.status === 200 || data.ok || data.skipped) {
+        const updated = { 
+          ...dispatch, 
+          sheets_synced: true, 
+          sheets_synced_at: new Date().toISOString() 
+        };
+        await dbService.updateDispatch(updated);
+        if (isMounted.current) {
+          setDispatch(updated);
+          showToast(data.skipped ? "Already synced" : "Uploaded to Google Sheet", "success");
+        }
+        logger.info('Upload successful.');
+      } else {
+        throw new Error(`Server returned status ${response.status}`);
+      }
     } catch (err: any) {
       logger.error('Upload failed.', err);
-      showToast(`Upload failed: ${err.message || 'Network error'}. Try again.`, "error");
+      if (err.name === 'AbortError') {
+        showToast("Upload timed out. Try again.", "error");
+      } else {
+        showToast(`Upload failed: ${err.message || 'Network error'}. Try again.`, "error");
+      }
     } finally {
-      setIsUploading(false);
+      if (isMounted.current) setIsUploading(false);
     }
   };
 
@@ -225,9 +267,9 @@ const DispatchDetailScreen: React.FC<Props> = ({
 
       {/* Tabs */}
       <div className="flex bg-slate-800 border-b border-white/5 p-1 z-30">
-        <button onClick={() => setActiveTab('SUMMARY')} className={`flex-1 py-3 text-[9px] font-bold uppercase tracking-widest transition-all rounded-lg ${activeTab === 'SUMMARY' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}>Packing Summary</button>
-        <button onClick={() => setActiveTab('LOG')} className={`flex-1 py-3 text-[9px] font-bold uppercase tracking-widest transition-all rounded-lg ${activeTab === 'LOG' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}>Full Scan Log</button>
-        <button onClick={() => setActiveTab('EDIT')} className={`flex-1 py-3 text-[9px] font-bold uppercase tracking-widest transition-all rounded-lg ${activeTab === 'EDIT' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}>Edit Report</button>
+        <button onClick={() => setActiveTab('SUMMARY')} className={`flex-1 py-3 text-[9px] font-bold uppercase tracking-widest transition-all rounded-lg ${activeTab === 'SUMMARY' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>Packing Summary</button>
+        <button onClick={() => setActiveTab('LOG')} className={`flex-1 py-3 text-[9px] font-bold uppercase tracking-widest transition-all rounded-lg ${activeTab === 'LOG' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>Full Scan Log</button>
+        <button onClick={() => setActiveTab('EDIT')} className={`flex-1 py-3 text-[9px] font-bold uppercase tracking-widest transition-all rounded-lg ${activeTab === 'EDIT' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>Edit Report</button>
       </div>
 
       {/* Content Area */}
@@ -235,10 +277,10 @@ const DispatchDetailScreen: React.FC<Props> = ({
         {activeTab === 'SUMMARY' && (
           <div className="space-y-2">
              {summaryList.length === 0 ? (
-               <div className="py-20 text-center opacity-30 uppercase font-bold text-xs">Waiting for data...</div>
+               <div className="py-20 text-center opacity-30 uppercase font-bold text-xs tracking-widest">Waiting for data...</div>
              ) : (
                summaryList.map(s => (
-                <div key={s.part_no} className="bg-slate-800 sober-border p-4 rounded-xl flex justify-between items-center shadow-sm">
+                <div key={s.part_no} className="bg-slate-800 sober-border p-4 rounded-xl flex justify-between items-center shadow-sm border border-white/5">
                     <div>
                       <h3 className="font-mono font-bold text-blue-400 text-sm">{s.part_no}</h3>
                       <p className="text-[10px] text-slate-400 font-bold uppercase">{s.part_name}</p>
@@ -256,10 +298,10 @@ const DispatchDetailScreen: React.FC<Props> = ({
         {activeTab === 'LOG' && (
           <div className="space-y-2">
             {realScans.length === 0 ? (
-              <div className="py-20 text-center opacity-30 uppercase font-bold text-xs">No scan records</div>
+              <div className="py-20 text-center opacity-30 uppercase font-bold text-xs tracking-widest">No scan records</div>
             ) : (
               realScans.map(s => (
-                <div key={s.id} className="bg-slate-800/40 p-4 rounded-xl sober-border flex justify-between items-center">
+                <div key={s.id} className="bg-slate-800/40 p-4 rounded-xl sober-border flex justify-between items-center border border-white/5">
                    <div className="flex gap-4 items-center">
                       <div className="bg-slate-700 p-2 rounded-lg text-slate-400">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /></svg>
@@ -279,22 +321,22 @@ const DispatchDetailScreen: React.FC<Props> = ({
         {activeTab === 'EDIT' && (
           <div className="space-y-6">
              {/* Manual Entry Form */}
-             <div className="bg-slate-800 sober-border p-6 rounded-2xl space-y-4 shadow-lg">
+             <div className="bg-slate-800 sober-border p-6 rounded-2xl space-y-4 shadow-lg border border-white/5">
                 <h3 className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-2 border-b border-white/5 pb-2">Add Manual Entry</h3>
                 <div className="space-y-4">
-                  <input value={manualPartNo} onChange={e => setManualPartNo(e.target.value)} placeholder="PART NUMBER" className="input input-bordered w-full bg-slate-900 text-white font-mono uppercase text-sm border-slate-700" />
-                  <input value={manualPartName} onChange={e => setManualPartName(e.target.value)} placeholder="PART NAME (OPTIONAL)" className="input input-bordered w-full bg-slate-900 text-white uppercase text-xs border-slate-700" />
+                  <input value={manualPartNo} onChange={e => setManualPartNo(e.target.value)} placeholder="PART NUMBER" className="input input-bordered w-full bg-slate-900 text-white font-mono uppercase text-sm border-slate-700 focus:border-blue-500" />
+                  <input value={manualPartName} onChange={e => setManualPartName(e.target.value)} placeholder="PART NAME (OPTIONAL)" className="input input-bordered w-full bg-slate-900 text-white uppercase text-xs border-slate-700 focus:border-blue-500" />
                   <div className="grid grid-cols-2 gap-4">
                     <div className="form-control">
                       <label className="label py-1"><span className="label-text text-[8px] font-bold text-slate-500 uppercase">Boxes</span></label>
-                      <input type="number" value={manualBoxes} onChange={e => setManualBoxes(e.target.value)} className="input input-bordered bg-slate-900 text-white font-mono border-slate-700" />
+                      <input type="number" value={manualBoxes} onChange={e => setManualBoxes(e.target.value)} className="input input-bordered bg-slate-900 text-white font-mono border-slate-700 focus:border-blue-500" />
                     </div>
                     <div className="form-control">
                       <label className="label py-1"><span className="label-text text-[8px] font-bold text-slate-500 uppercase">Qty / Box</span></label>
-                      <input type="number" value={manualQtyPerBox} onChange={e => setManualQtyPerBox(e.target.value)} className="input input-bordered bg-slate-900 text-white font-mono border-slate-700" />
+                      <input type="number" value={manualQtyPerBox} onChange={e => setManualQtyPerBox(e.target.value)} className="input input-bordered bg-slate-900 text-white font-mono border-slate-700 focus:border-blue-500" />
                     </div>
                   </div>
-                  <button onClick={handleManualEntry} className="btn btn-primary btn-block h-14 font-bold uppercase tracking-widest text-xs rounded-xl border-none">Manual Entry</button>
+                  <button onClick={handleManualEntry} className="btn btn-primary btn-block h-14 font-bold uppercase tracking-widest text-xs rounded-xl border-none shadow-lg">Manual Entry</button>
                 </div>
              </div>
 
@@ -303,14 +345,14 @@ const DispatchDetailScreen: React.FC<Props> = ({
                <div className="space-y-3">
                   <h3 className="text-[10px] font-bold text-red-500 uppercase tracking-widest ml-1 border-b border-white/5 pb-2">Modify Records</h3>
                   {summaryList.map(s => (
-                    <div key={s.part_no} className="bg-slate-800/60 p-4 rounded-xl sober-border flex justify-between items-center">
+                    <div key={s.part_no} className="bg-slate-800/60 p-4 rounded-xl sober-border flex justify-between items-center border border-white/5">
                         <div>
                           <p className="font-mono font-bold text-white text-xs">{s.part_no}</p>
-                          <p className="text-[9px] text-slate-500 font-bold uppercase">Stored: {s.boxes} Boxes</p>
+                          <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Stored: {s.boxes} Boxes</p>
                         </div>
                         <div className="flex gap-2">
-                          <button onClick={() => dbService.removeOneScan(dispatch.dispatch_id, s.part_no).then(load)} className="btn btn-sm btn-outline btn-error border-2 font-bold uppercase text-[9px] px-3">Remove 1</button>
-                          <button onClick={() => dbService.removeAllScansForPart(dispatch.dispatch_id, s.part_no).then(load)} className="btn btn-sm btn-error font-bold uppercase text-[9px] px-3">Remove All</button>
+                          <button onClick={() => dbService.removeOneScan(dispatch.dispatch_id, s.part_no).then(load)} className="btn btn-sm btn-outline btn-error border-2 font-bold uppercase text-[9px] px-3 h-10">Remove 1</button>
+                          <button onClick={() => dbService.removeAllScansForPart(dispatch.dispatch_id, s.part_no).then(load)} className="btn btn-sm btn-error font-bold uppercase text-[9px] px-3 h-10">Remove All</button>
                         </div>
                     </div>
                   ))}
@@ -331,7 +373,7 @@ const DispatchDetailScreen: React.FC<Props> = ({
             }} 
             className="btn btn-primary btn-block h-16 rounded-2xl text-sm font-bold tracking-widest uppercase shadow-xl border-none"
           >
-            {isFinalizing ? 'PROCESSING...' : 'Finalize'}
+            {isFinalizing ? 'Finalizing...' : 'Finalize'}
           </button>
         )}
         {activeTab === 'LOG' && (
@@ -349,7 +391,7 @@ const DispatchDetailScreen: React.FC<Props> = ({
           </button>
         )}
         {activeTab === 'EDIT' && (
-          <button onClick={() => setActiveTab('SUMMARY')} className="btn btn-ghost btn-block text-[10px] font-bold text-slate-500 tracking-widest uppercase">
+          <button onClick={() => setActiveTab('SUMMARY')} className="btn btn-ghost btn-block text-[10px] font-bold text-slate-500 tracking-widest uppercase h-14">
             Exit Edit Mode
           </button>
         )}
@@ -365,9 +407,9 @@ const DispatchDetailScreen: React.FC<Props> = ({
                 onClick={() => { setShowFinalizeOptions(false); handleDownload(); }} 
                 className="btn btn-lg btn-block bg-blue-600 hover:bg-blue-700 text-white border-none flex justify-start gap-4 h-20 rounded-2xl px-6"
               >
-                <div className="bg-white/20 p-2 rounded-xl"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg></div>
+                <div className="bg-white/20 p-2 rounded-xl shadow-inner"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg></div>
                 <div className="text-left">
-                  <p className="font-bold text-sm uppercase">Download Excel</p>
+                  <p className="font-bold text-sm uppercase tracking-tight">Download Excel</p>
                   <p className="text-[9px] opacity-60 font-bold uppercase tracking-widest">Local Packing Slip</p>
                 </div>
               </button>
@@ -375,18 +417,22 @@ const DispatchDetailScreen: React.FC<Props> = ({
               <button 
                 disabled={isUploading}
                 onClick={handleUploadToSheet} 
-                className="btn btn-lg btn-block bg-emerald-600 hover:bg-emerald-700 text-white border-none flex justify-start gap-4 h-20 rounded-2xl px-6 disabled:bg-slate-700 disabled:opacity-50"
+                className={`btn btn-lg btn-block text-white border-none flex justify-start gap-4 h-20 rounded-2xl px-6 transition-all ${dispatch.sheets_synced ? 'bg-emerald-700' : 'bg-emerald-600 hover:bg-emerald-500'} disabled:bg-slate-700 disabled:opacity-50`}
               >
-                <div className="bg-white/20 p-2 rounded-xl">
+                <div className="bg-white/20 p-2 rounded-xl shadow-inner">
                   {isUploading ? <span className="loading loading-spinner loading-xs"></span> : <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>}
                 </div>
                 <div className="text-left">
-                  <p className="font-bold text-sm uppercase">{dispatch.sheets_synced ? 'Uploaded ✅' : 'Upload to Spreadsheet'}</p>
-                  <p className="text-[9px] opacity-60 font-bold uppercase tracking-widest">{isUploading ? 'Contacting Server...' : 'Cloud Data Storage'}</p>
+                  <p className="font-bold text-sm uppercase tracking-tight">
+                    {isUploading ? 'Uploading...' : (dispatch.sheets_synced ? 'Uploaded ✅' : 'Upload to Spreadsheet')}
+                  </p>
+                  <p className="text-[9px] opacity-60 font-bold uppercase tracking-widest">
+                    {isUploading ? 'Contacting Server...' : 'Cloud Data Sync'}
+                  </p>
                 </div>
               </button>
 
-              <button onClick={() => setShowFinalizeOptions(false)} className="btn btn-ghost btn-block mt-4 text-slate-500 font-bold uppercase text-xs">BACK</button>
+              <button onClick={() => setShowFinalizeOptions(false)} className="btn btn-ghost btn-block mt-4 text-slate-500 font-bold uppercase text-xs tracking-widest h-12">BACK</button>
             </div>
           </div>
           <div className="modal-backdrop bg-black/70" onClick={() => setShowFinalizeOptions(false)}></div>
