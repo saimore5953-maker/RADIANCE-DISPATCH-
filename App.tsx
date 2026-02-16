@@ -82,7 +82,7 @@ const App: React.FC = () => {
 
   if (!isDbReady) {
     return (
-      <div className="flex items-center justify-center h-screen w-full bg-slate-950">
+      <div className="flex items-center justify-center min-h-screen w-full bg-slate-950">
         <div className="text-center relative">
           <div className="loading loading-spinner loading-lg text-primary mb-6"></div>
           <p className="text-xl font-black uppercase tracking-[0.4em] text-white">Radiance</p>
@@ -96,7 +96,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="max-w-md mx-auto h-screen w-full overflow-hidden flex flex-col relative bg-transparent">
+    <div className="max-w-md mx-auto min-h-screen w-full flex flex-col relative bg-transparent">
       {currentView === 'LOGIN' && <LoginScreen onLogin={handleLogin} />}
       {currentView === 'HOME' && (
         <HomeScreen 

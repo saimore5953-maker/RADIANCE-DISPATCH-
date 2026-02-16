@@ -122,6 +122,17 @@ const DispatchDetailScreen: React.FC<Props> = ({
     triggerDownload(res.excel);
   };
 
+  const formatDateTime = (iso: string) => {
+    const d = new Date(iso);
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    const hh = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    const ss = String(d.getSeconds()).padStart(2, '0');
+    return `${dd}/${mm}/${yyyy} ${hh}:${min}:${ss}`;
+  };
+
   const handleUploadToSheet = async () => {
     const settings = settingsService.getSettings();
     const webhookUrl = settings.webhookUrl;
@@ -141,7 +152,7 @@ const DispatchDetailScreen: React.FC<Props> = ({
     const payload = {
       dispatch_no: dispatch.dispatch_no,
       dispatch_id: dispatch.dispatch_id,
-      completed_at: dispatch.end_time || new Date().toISOString(),
+      completed_at: formatDateTime(dispatch.end_time || new Date().toISOString()),
       customer_name: dispatch.customer_name,
       dispatch_executive: dispatch.operator_id,
       driver_name: dispatch.driver_name,
@@ -166,14 +177,6 @@ const DispatchDetailScreen: React.FC<Props> = ({
         mode: 'no-cors' // Common for Google Apps Script webhooks if CORS is not handled
       });
 
-      // Since we use no-cors, we can't always check response.ok or body.
-      // For standard webhooks with CORS:
-      // if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      // const result = await response.json();
-      
-      // Assuming success if no exception is thrown in no-cors mode, 
-      // or if using standard fetch and response is ok.
-      
       const updated = { 
         ...dispatch, 
         sheets_synced: true, 

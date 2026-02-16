@@ -3,7 +3,7 @@
 <html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RADIANCE DISPATCH</title>
     
     <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
@@ -18,7 +18,9 @@
             font-family: 'Inter', sans-serif;
             background-color: #0f172a; /* Slate 900 */
             color: #f8fafc;
-            overflow: hidden;
+            height: auto;
+            overflow-y: auto;
+            touch-action: pan-y;
             -webkit-tap-highlight-color: transparent;
         }
 
@@ -53,7 +55,7 @@
     }
     </script>
 </head>
-<body class="antialiased h-screen w-screen relative bg-slate-900">
+<body class="antialiased w-screen relative bg-slate-900">
     <div id="root" class="h-full w-full relative z-10"></div>
     <!-- CRITICAL: Added entry point script -->
     <script type="module" src="./index.tsx"></script>
