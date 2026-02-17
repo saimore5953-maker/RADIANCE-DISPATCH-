@@ -13,11 +13,13 @@ export default async function handler(req: any, res: any) {
 
   const apiKey = process.env.API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'System API key not configured' });
+    return res.status(500).json({ error: 'System API key not configured on server. Please check Vercel environment variables.' });
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
+    // Explicitly use named parameter for initialization
+    const ai = new GoogleGenAI({ apiKey: apiKey });
+    
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: {
@@ -51,6 +53,6 @@ export default async function handler(req: any, res: any) {
     });
   } catch (err: any) {
     console.error("Gemini Proxy Server Error:", err);
-    return res.status(500).json({ error: 'AI Processing Error' });
+    return res.status(500).json({ error: err.message || 'AI Processing Error' });
   }
 }
