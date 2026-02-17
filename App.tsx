@@ -60,9 +60,13 @@ const App: React.FC = () => {
   };
 
   const finalizeCreateDispatch = async (logistics: { driver_name: string; driver_mobile: string; vehicle_no: string; lr_no: string }) => {
-    if (!tempCustomer) return;
+    if (!tempCustomer) {
+      logger.error('Missing customer selection');
+      return;
+    }
     
     try {
+      logger.info('Creating new dispatch session...', { customer: tempCustomer });
       // Use robust UUID generator
       const tempUuid = generateUUID();
       const newDispatch: Dispatch = {
@@ -83,12 +87,19 @@ const App: React.FC = () => {
       };
       
       await dbService.createDispatch(newDispatch);
+      
+      // Safety verify
+      const verified = await dbService.getDispatchById(newDispatch.dispatch_id);
+      if (!verified) throw new Error("Database verification failed after write");
+
+      logger.info('Dispatch session ready. Switching to SCAN view.');
       setActiveDispatch(newDispatch);
       setCurrentView('SCAN');
       setTempCustomer(null);
-    } catch (err) {
+    } catch (err: any) {
       logger.error('Failed to create dispatch session.', err);
-      alert("Error: Could not start scan session. Please try again.");
+      alert(`System Error: ${err.message || "Could not start scan session"}. Please try again.`);
+      throw err; // Re-throw to allow component to reset loading state
     }
   };
 
