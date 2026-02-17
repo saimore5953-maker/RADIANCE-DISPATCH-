@@ -6,23 +6,38 @@ class DispatchDatabase {
 
   async init(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open('DispatchDB', 1);
+      // Bumping version to 2 to trigger onupgradeneeded for existing users on Vercel
+      const request = indexedDB.open('DispatchDB', 2);
 
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
+        const oldVersion = event.oldVersion;
         
-        // Dispatch Counter
-        db.createObjectStore('counters', { keyPath: 'id' });
+        // Initial setup for new users
+        if (oldVersion < 1) {
+          db.createObjectStore('counters', { keyPath: 'id' });
+          
+          const dispatchStore = db.createObjectStore('dispatches', { keyPath: 'dispatch_id' });
+          // Ensure dispatch_no is NOT unique to allow multiple drafts with placeholder 0
+          dispatchStore.createIndex('dispatch_no', 'dispatch_no', { unique: false });
+          dispatchStore.createIndex('status', 'status');
+          
+          const scanStore = db.createObjectStore('scans', { keyPath: 'id' });
+          scanStore.createIndex('dispatch_id', 'dispatch_id');
+          scanStore.createIndex('part_no', 'part_no');
+        } 
         
-        // Dispatch Table
-        const dispatchStore = db.createObjectStore('dispatches', { keyPath: 'dispatch_id' });
-        dispatchStore.createIndex('dispatch_no', 'dispatch_no', { unique: false });
-        dispatchStore.createIndex('status', 'status');
-        
-        // Scans Table
-        const scanStore = db.createObjectStore('scans', { keyPath: 'id' });
-        scanStore.createIndex('dispatch_id', 'dispatch_id');
-        scanStore.createIndex('part_no', 'part_no');
+        // Upgrade path for users who had the unique constraint error
+        if (oldVersion >= 1 && oldVersion < 2) {
+          const transaction = (event.target as any).transaction;
+          const dispatchStore = transaction.objectStore('dispatches');
+          
+          // Recreate the index without the unique requirement
+          if (dispatchStore.indexNames.contains('dispatch_no')) {
+            dispatchStore.deleteIndex('dispatch_no');
+          }
+          dispatchStore.createIndex('dispatch_no', 'dispatch_no', { unique: false });
+        }
       };
 
       request.onsuccess = (event) => {
