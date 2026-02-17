@@ -5,6 +5,7 @@ import { performOCR } from '../services/gemini';
 import { Dispatch, ScanRecord, ScanStatus, PartSummary, DispatchStatus } from '../types';
 import { settingsService } from '../services/settingsService';
 import { logger } from '../services/logger';
+import { generateUUID } from '../services/utils';
 
 interface Props {
   dispatch: Dispatch;
@@ -36,12 +37,6 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
     if (isMounted.current) setScans(data);
   }, [dispatch.dispatch_id]);
 
-  useEffect(() => {
-    loadData();
-    startCamera();
-    return stopCamera;
-  }, [loadData]);
-
   const stopCamera = useCallback(() => {
     if (videoRef.current && videoRef.current.srcObject) {
       const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
@@ -51,21 +46,52 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
   }, []);
 
   const startCamera = async () => {
+    if (!isMounted.current) return;
+    setErrorMsg(null);
+    
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setErrorMsg("Camera API not supported in this browser environment.");
+      return;
+    }
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
+      const constraints = { 
         video: { 
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
         } 
-      });
+      };
+      
+      logger.info('Requesting camera stream...', constraints);
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      
       if (videoRef.current && isMounted.current) {
         videoRef.current.srcObject = stream;
+        try {
+          await videoRef.current.play();
+          logger.info('Camera stream started successfully.');
+        } catch (playErr) {
+          logger.error('Video element play() failed.', playErr);
+        }
       }
-    } catch (err) {
-      if (isMounted.current) setErrorMsg("Camera access failed. Check permissions.");
+    } catch (err: any) {
+      logger.error("Camera access failed", err);
+      if (isMounted.current) {
+        let msg = "Camera access failed. Please try again.";
+        if (err.name === 'NotAllowedError') msg = "Camera permission denied. Please allow camera access in browser settings.";
+        else if (err.name === 'NotFoundError') msg = "No camera hardware found on this device.";
+        else if (err.name === 'OverconstrainedError') msg = "The device camera does not support requested settings.";
+        setErrorMsg(msg);
+      }
     }
   };
+
+  useEffect(() => {
+    loadData();
+    startCamera();
+    return stopCamera;
+  }, [loadData]);
 
   const captureAndScan = async () => {
     if (!videoRef.current || !canvasRef.current || isProcessing) return;
@@ -77,7 +103,6 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
       return;
     }
     
-    // Resize image logic
     const videoWidth = videoRef.current.videoWidth;
     const videoHeight = videoRef.current.videoHeight;
     const MAX_EDGE = 1024;
@@ -101,17 +126,13 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
     context.drawImage(videoRef.current, 0, 0, targetWidth, targetHeight);
     
     const base64 = canvasRef.current.toDataURL('image/jpeg', 0.8).split(',')[1];
-
-    // Logging timeout as requested
-    console.log("OCR timeout seconds =", settings.ocrTimeoutSec);
     logger.info(`Starting OCR with ${settings.ocrTimeoutSec}s timeout`);
 
     try {
-      // performOCR service internally handles the settings-based timeout via AbortController
       const ocrResult = await performOCR(base64);
       
       const newScan: ScanRecord = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         dispatch_id: dispatch.dispatch_id,
         timestamp: new Date().toISOString(),
         part_no: ocrResult.partNo,
@@ -132,7 +153,7 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
         setTimeout(() => { if (isMounted.current) setLastScan(null); }, 3000);
       }
     } catch (err: any) {
-      const isTimeout = err.name === 'AbortError' || err.message?.includes('aborted') || err.message === 'OCR_TIMEOUT';
+      const isTimeout = err.name === 'AbortError' || err.message?.includes('aborted');
       if (isTimeout) {
         alert(`OCR taking too long (exceeded ${settings.ocrTimeoutSec}s). Please try again.`);
       } else {
@@ -145,6 +166,21 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
 
   return (
     <div className="flex-1 flex flex-col bg-slate-900 h-screen w-full relative select-none overflow-hidden">
+      {/* CAMERA ERROR OVERLAY */}
+      {errorMsg && (
+        <div className="absolute inset-0 z-50 bg-slate-900 flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-300">
+          <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-2xl flex items-center justify-center mb-6 border border-red-500/20 shadow-lg shadow-red-500/5">
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+          </div>
+          <h3 className="text-white font-black uppercase tracking-widest text-lg mb-2">Camera Blocked</h3>
+          <p className="text-slate-400 text-xs mb-10 leading-relaxed max-w-xs">{errorMsg}</p>
+          <div className="space-y-4 w-full max-w-xs">
+            <button onClick={startCamera} className="btn btn-primary btn-block rounded-2xl h-16 font-black uppercase tracking-widest shadow-xl border-none">Retry Access</button>
+            <button onClick={onBack} className="btn btn-ghost btn-block text-slate-500 font-bold uppercase tracking-widest h-12">Return Home</button>
+          </div>
+        </div>
+      )}
+
       {/* SCANNER VIEWPORT */}
       <div className="flex-1 relative bg-black overflow-hidden flex flex-col">
         <video 
@@ -156,7 +192,6 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
         />
         <canvas ref={canvasRef} className="hidden" />
         
-        {/* Targeting Overlay (Controlled by Settings) */}
         {settings.showOcrViewport && (
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-12">
             <div className="w-full aspect-[4/3] border-2 border-white/20 rounded-2xl relative">
@@ -209,16 +244,14 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
 
       {/* Control Area */}
       <div className="bg-slate-900 px-8 py-4 flex flex-col items-center border-t border-white/5 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-40">
-        
-        {/* Diagnostic Timeout Line (Subtle) */}
         <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-3 opacity-60">
           OCR timeout: {settings.ocrTimeoutSec}s
         </p>
 
         <button 
           onClick={captureAndScan}
-          disabled={isProcessing}
-          className={`btn btn-circle w-20 h-20 ${isProcessing ? 'btn-disabled bg-slate-800' : 'bg-blue-600 hover:bg-blue-500 border-none shadow-xl active:scale-95'}`}
+          disabled={isProcessing || !!errorMsg}
+          className={`btn btn-circle w-20 h-20 ${isProcessing || !!errorMsg ? 'btn-disabled bg-slate-800' : 'bg-blue-600 hover:bg-blue-500 border-none shadow-xl active:scale-95'}`}
         >
           {isProcessing ? (
             <span className="loading loading-spinner loading-md text-slate-500"></span>
@@ -237,7 +270,6 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
         </button>
       </div>
 
-      {/* Control Modal */}
       {isDrawerOpen && (
         <div className="modal modal-open modal-bottom">
           <div className="modal-box bg-slate-800 rounded-t-3xl p-6 text-white border-t border-white/10">
@@ -258,7 +290,6 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
         </div>
       )}
 
-      {/* Discard Confirmation */}
       {showDiscardConfirm && (
         <div className="modal modal-open">
           <div className="modal-box text-center bg-slate-800 border border-white/10 rounded-3xl p-8">
@@ -272,7 +303,6 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
         </div>
       )}
 
-      {/* Exit Confirmation */}
       {showExitConfirm && (
         <div className="modal modal-open">
           <div className="modal-box text-center bg-slate-800 border border-white/10 rounded-3xl p-8">

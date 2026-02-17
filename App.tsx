@@ -11,18 +11,7 @@ import CustomerSelectionScreen from './components/CustomerSelectionScreen';
 import LogisticsDetailsScreen from './components/LogisticsDetailsScreen';
 import SettingsScreen from './components/SettingsScreen';
 import { logger } from './services/logger';
-
-// Robust UUID fallback for non-secure contexts (http) where crypto.randomUUID is not available
-const generateUUID = () => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-};
+import { generateUUID } from './services/utils';
 
 const App: React.FC = () => {
   const [auth, setAuth] = useState<AuthState>({ operatorId: null, isLoggedIn: false });
@@ -67,12 +56,11 @@ const App: React.FC = () => {
     
     try {
       logger.info('Creating new dispatch session...', { customer: tempCustomer });
-      // Use robust UUID generator
       const tempUuid = generateUUID();
       const newDispatch: Dispatch = {
         id: tempUuid,
-        dispatch_no: 0, // Placeholder
-        dispatch_id: `DRAFT-${tempUuid.slice(0, 8).toUpperCase()}`, // Temporary internal key
+        dispatch_no: 0,
+        dispatch_id: `DRAFT-${tempUuid.slice(0, 8).toUpperCase()}`,
         operator_id: auth.operatorId || 'UNKNOWN',
         customer_name: tempCustomer,
         driver_name: logistics.driver_name,
@@ -88,7 +76,6 @@ const App: React.FC = () => {
       
       await dbService.createDispatch(newDispatch);
       
-      // Safety verify
       const verified = await dbService.getDispatchById(newDispatch.dispatch_id);
       if (!verified) throw new Error("Database verification failed after write");
 
@@ -99,7 +86,7 @@ const App: React.FC = () => {
     } catch (err: any) {
       logger.error('Failed to create dispatch session.', err);
       alert(`System Error: ${err.message || "Could not start scan session"}. Please try again.`);
-      throw err; // Re-throw to allow component to reset loading state
+      throw err;
     }
   };
 

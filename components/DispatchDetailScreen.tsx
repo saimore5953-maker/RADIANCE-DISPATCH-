@@ -5,6 +5,7 @@ import { Dispatch, ScanRecord, PartSummary, DispatchStatus, ScanStatus } from '.
 import { generateExports, triggerDownload } from '../services/exportService';
 import { settingsService } from '../services/settingsService';
 import { logger } from '../services/logger';
+import { generateUUID } from '../services/utils';
 
 interface ExtendedPartSummary extends PartSummary {
   is_manual: boolean;
@@ -88,7 +89,7 @@ const DispatchDetailScreen: React.FC<Props> = ({
 
     for (let i = 0; i < boxes; i++) {
       const newScan: ScanRecord = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         dispatch_id: dispatch.dispatch_id,
         timestamp: new Date().toISOString(),
         part_no: manualPartNo.toUpperCase(),
@@ -146,9 +147,6 @@ const DispatchDetailScreen: React.FC<Props> = ({
     logger.info('Initiating spreadsheet sync...');
 
     try {
-      // CRITICAL: We use Content-Type: text/plain to avoid preflight OPTIONS request
-      // which Google Apps Script does not support. This is the standard pattern for
-      // successfully reading responses from GAS in a cross-origin production environment.
       const response = await fetch(webhookUrl, {
         method: 'POST',
         mode: 'cors',
@@ -173,7 +171,6 @@ const DispatchDetailScreen: React.FC<Props> = ({
           return;
         }
 
-        // SYNC SUCCESS: Server assigned real IDs
         const newId = resData.dispatch_id;
         const newNo = resData.dispatch_no;
 
@@ -183,7 +180,6 @@ const DispatchDetailScreen: React.FC<Props> = ({
 
         await dbService.finalizeSync(dispatch.dispatch_id, newId, newNo);
         
-        // Refresh local state and inform parent
         const updated = await dbService.getDispatchById(newId);
         if (updated) {
           if (isMounted.current) setDispatch(updated);
@@ -360,7 +356,6 @@ const DispatchDetailScreen: React.FC<Props> = ({
           <div className="modal-box bg-slate-800 rounded-t-3xl p-8 text-white border-t border-white/10">
             <h3 className="text-xl font-bold uppercase tracking-widest mb-8 text-center">Batch Finalize Actions</h3>
             <div className="space-y-4">
-              {/* Action 1: Upload (Mandatory for Assigning IDs) */}
               <button 
                 disabled={isUploading || dispatch.sheets_synced}
                 onClick={handleUploadToSheet} 
@@ -379,7 +374,6 @@ const DispatchDetailScreen: React.FC<Props> = ({
                 </div>
               </button>
 
-              {/* Action 2: Download (Locked until Upload) */}
               <div className="space-y-2">
                 <button 
                   disabled={!dispatch.sheets_synced}
