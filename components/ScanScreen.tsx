@@ -54,34 +54,65 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
       return;
     }
 
-    try {
-      const constraints = { 
+    // Tiered constraints to handle different hardware capabilities
+    const constraintSets = [
+      // 1. Ideal: Rear camera with 720p+
+      { 
         video: { 
-          facingMode: 'environment',
+          facingMode: { exact: 'environment' },
           width: { ideal: 1280 },
           height: { ideal: 720 }
         } 
-      };
-      
-      logger.info('Requesting camera stream...', constraints);
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      
-      if (videoRef.current && isMounted.current) {
-        videoRef.current.srcObject = stream;
-        try {
-          await videoRef.current.play();
-          logger.info('Camera stream started successfully.');
-        } catch (playErr) {
-          logger.error('Video element play() failed.', playErr);
-        }
+      },
+      // 2. High Compatibility Rear: No resolution requirement
+      { 
+        video: { 
+          facingMode: 'environment' 
+        } 
+      },
+      // 3. Absolute Fallback: Any available camera
+      { 
+        video: true 
       }
-    } catch (err: any) {
-      logger.error("Camera access failed", err);
+    ];
+
+    let stream: MediaStream | null = null;
+    let lastError: any = null;
+
+    for (const constraints of constraintSets) {
+      try {
+        logger.info('Attempting camera access with constraints:', constraints);
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (stream) {
+          logger.info('Camera access granted with constraints:', constraints);
+          break; 
+        }
+      } catch (err: any) {
+        lastError = err;
+        logger.warn(`Constraint set failed: ${err.name || err.message}`);
+        // Continue to next constraint set
+      }
+    }
+
+    if (stream && videoRef.current && isMounted.current) {
+      videoRef.current.srcObject = stream;
+      try {
+        await videoRef.current.play();
+        logger.info('Camera stream started successfully.');
+      } catch (playErr) {
+        logger.error('Video element play() failed.', playErr);
+      }
+    } else if (!stream) {
+      logger.error("All camera access attempts failed", lastError);
       if (isMounted.current) {
-        let msg = "Camera access failed. Please try again.";
-        if (err.name === 'NotAllowedError') msg = "Camera permission denied. Please allow camera access in browser settings.";
-        else if (err.name === 'NotFoundError') msg = "No camera hardware found on this device.";
-        else if (err.name === 'OverconstrainedError') msg = "The device camera does not support requested settings.";
+        let msg = "Camera access failed. Please try again or use manual entry.";
+        if (lastError?.name === 'NotAllowedError') {
+          msg = "Camera permission denied. Please allow camera access in browser settings.";
+        } else if (lastError?.name === 'NotFoundError' || lastError?.name === 'DevicesNotFoundError') {
+          msg = "No camera hardware found or matching your device. Check if another app is using it.";
+        } else if (lastError?.name === 'NotReadableError' || lastError?.name === 'TrackStartError') {
+          msg = "Camera is already in use by another application or tab.";
+        }
         setErrorMsg(msg);
       }
     }
@@ -137,13 +168,14 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
         timestamp: new Date().toISOString(),
         part_no: ocrResult.partNo,
         part_name: ocrResult.partName,
-        qty_nos: ocrResult.qty,
+        qty: ocrResult.qty, 
+        qty_nos: ocrResult.qty, 
         status: ScanStatus.ACCEPTED,
         ocr_text_raw: ocrResult.rawText,
         ocr_confidence: ocrResult.confidence,
         ocr_text_hash: 'CLOUD',
         image_phash: 'CLOUD',
-      };
+      } as ScanRecord;
 
       await dbService.addScan(newScan);
       
@@ -172,11 +204,27 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
           <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-2xl flex items-center justify-center mb-6 border border-red-500/20 shadow-lg shadow-red-500/5">
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
           </div>
-          <h3 className="text-white font-black uppercase tracking-widest text-lg mb-2">Camera Blocked</h3>
+          <h3 className="text-white font-black uppercase tracking-widest text-lg mb-2">Camera Unavailable</h3>
           <p className="text-slate-400 text-xs mb-10 leading-relaxed max-w-xs">{errorMsg}</p>
           <div className="space-y-4 w-full max-w-xs">
-            <button onClick={startCamera} className="btn btn-primary btn-block rounded-2xl h-16 font-black uppercase tracking-widest shadow-xl border-none">Retry Access</button>
-            <button onClick={onBack} className="btn btn-ghost btn-block text-slate-500 font-bold uppercase tracking-widest h-12">Return Home</button>
+            <button 
+              onClick={() => onComplete(dispatch.dispatch_id)} 
+              className="btn bg-blue-600 hover:bg-blue-500 border-none btn-block rounded-2xl h-16 font-black uppercase tracking-widest shadow-xl text-white"
+            >
+              Manual Entry
+            </button>
+            <button 
+              onClick={startCamera} 
+              className="btn btn-outline border-slate-700 text-slate-300 btn-block rounded-2xl h-14 font-bold uppercase tracking-widest"
+            >
+              Retry Access
+            </button>
+            <button 
+              onClick={onBack} 
+              className="btn btn-ghost btn-block text-slate-500 font-bold uppercase tracking-widest h-12"
+            >
+              Return Home
+            </button>
           </div>
         </div>
       )}

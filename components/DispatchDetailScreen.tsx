@@ -171,20 +171,12 @@ const DispatchDetailScreen: React.FC<Props> = ({
           return;
         }
 
-        const newId = resData.dispatch_id;
-        const newNo = resData.dispatch_no;
-
-        if (!newId || !newNo) {
-          throw new Error("Sync succeeded but IDs were not returned by server.");
-        }
-
-        await dbService.finalizeSync(dispatch.dispatch_id, newId, newNo);
+        await dbService.markAsSynced(dispatch.dispatch_id);
         
-        const updated = await dbService.getDispatchById(newId);
-        if (updated) {
-          if (isMounted.current) setDispatch(updated);
-          onSyncSuccess?.(newId);
-          showToast("Sync Successful. IDs Assigned.", "success");
+        const updated = await dbService.getDispatchById(dispatch.dispatch_id);
+        if (updated && isMounted.current) {
+          setDispatch(updated);
+          showToast("Cloud Sync Successful", "success");
         }
       } else {
         throw new Error(resData.error || "Server logic failed");
@@ -213,13 +205,15 @@ const DispatchDetailScreen: React.FC<Props> = ({
         </div>
         <div className="flex-1">
           <div>
-            <h2 className="text-[10px] font-bold uppercase text-blue-400 tracking-widest">{dispatch.dispatch_id}</h2>
+            <h2 className="text-[10px] font-bold uppercase text-blue-400 tracking-widest">
+              {dispatch.dispatch_id.startsWith('DRAFT-') ? 'NEW SESSION' : dispatch.dispatch_id}
+            </h2>
             <p className="text-sm font-bold text-white truncate max-w-[180px]">{dispatch.customer_name}</p>
           </div>
         </div>
         <div className="flex-none">
-           <div className={`badge badge-sm font-bold ${dispatch.status === DispatchStatus.COMPLETED ? 'badge-success' : 'badge-primary'} uppercase text-[8px]`}>
-            {dispatch.status}
+           <div className={`badge badge-sm font-bold ${dispatch.sheets_synced ? 'badge-success' : 'badge-primary'} uppercase text-[8px]`}>
+            {dispatch.sheets_synced ? 'SYNCED' : 'UNSAVED'}
            </div>
         </div>
       </div>
@@ -327,19 +321,13 @@ const DispatchDetailScreen: React.FC<Props> = ({
             }} 
             className="btn btn-primary btn-block h-16 rounded-2xl text-sm font-bold tracking-widest uppercase shadow-xl border-none"
           >
-            Finalize
+            Finalize batch
           </button>
         )}
         {activeTab === 'LOG' && (
           <button 
-            onClick={() => {
-              if (dispatch.status === DispatchStatus.COMPLETED) {
-                alert("This batch is finalized and cannot be continued.");
-              } else {
-                onContinueScanning?.(dispatch);
-              }
-            }}
-            className={`btn btn-block h-16 rounded-2xl text-sm font-bold tracking-widest uppercase border-none ${dispatch.status === DispatchStatus.COMPLETED ? 'btn-disabled opacity-40' : 'bg-slate-700 text-white'}`}
+            onClick={() => onContinueScanning?.(dispatch)}
+            className="btn btn-block h-16 rounded-2xl text-sm font-bold tracking-widest uppercase border-none bg-slate-700 text-white"
           >
             Continue Scanning
           </button>
@@ -357,7 +345,7 @@ const DispatchDetailScreen: React.FC<Props> = ({
             <h3 className="text-xl font-bold uppercase tracking-widest mb-8 text-center">Batch Finalize Actions</h3>
             <div className="space-y-4">
               <button 
-                disabled={isUploading || dispatch.sheets_synced}
+                disabled={isUploading}
                 onClick={handleUploadToSheet} 
                 className={`btn btn-lg btn-block text-white border-none flex justify-start gap-4 h-20 rounded-2xl px-6 transition-all ${dispatch.sheets_synced ? 'bg-emerald-700' : 'bg-blue-600 hover:bg-blue-500'} disabled:bg-slate-700`}
               >
@@ -366,30 +354,24 @@ const DispatchDetailScreen: React.FC<Props> = ({
                 </div>
                 <div className="text-left">
                   <p className="font-bold text-sm uppercase tracking-tight">
-                    {isUploading ? 'Uploading...' : (dispatch.sheets_synced ? 'Uploaded Successfully' : 'Upload to Spreadsheet')}
+                    {isUploading ? 'Uploading...' : (dispatch.sheets_synced ? 'Sync Complete' : 'Upload to Spreadsheet')}
                   </p>
                   <p className="text-[9px] opacity-60 font-bold uppercase tracking-widest">
-                    {dispatch.sheets_synced ? 'Sheet synced at ' + new Date(dispatch.sheets_synced_at!).toLocaleTimeString() : 'Assigns Dispatch No & ID'}
+                    {dispatch.sheets_synced ? 'Last sync: ' + new Date(dispatch.sheets_synced_at!).toLocaleTimeString() : 'Sync data to master sheet'}
                   </p>
                 </div>
               </button>
 
-              <div className="space-y-2">
-                <button 
-                  disabled={!dispatch.sheets_synced}
-                  onClick={() => { setShowFinalizeOptions(false); handleDownload(); }} 
-                  className={`btn btn-lg btn-block text-white border-none flex justify-start gap-4 h-20 rounded-2xl px-6 ${dispatch.sheets_synced ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-700 cursor-not-allowed opacity-50'}`}
-                >
-                  <div className="bg-white/20 p-2 rounded-xl shadow-inner"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg></div>
-                  <div className="text-left">
-                    <p className="font-bold text-sm uppercase tracking-tight">Download Packing Slip</p>
-                    <p className="text-[9px] opacity-60 font-bold uppercase tracking-widest">Excel Export (A4 Ready)</p>
-                  </div>
-                </button>
-                {!dispatch.sheets_synced && (
-                  <p className="text-center text-[8px] font-bold text-amber-500 uppercase tracking-widest">Upload first to assign Dispatch No and ID</p>
-                )}
-              </div>
+              <button 
+                onClick={() => { setShowFinalizeOptions(false); handleDownload(); }} 
+                className="btn btn-lg btn-block text-white border-none flex justify-start gap-4 h-20 rounded-2xl px-6 bg-emerald-600 hover:bg-emerald-700"
+              >
+                <div className="bg-white/20 p-2 rounded-xl shadow-inner"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg></div>
+                <div className="text-left">
+                  <p className="font-bold text-sm uppercase tracking-tight">Download Packing Slip</p>
+                  <p className="text-[9px] opacity-60 font-bold uppercase tracking-widest">Excel Export (A4 Ready)</p>
+                </div>
+              </button>
 
               <button onClick={() => setShowFinalizeOptions(false)} className="btn btn-ghost btn-block mt-4 text-slate-500 font-bold uppercase text-xs tracking-widest h-12">CANCEL</button>
             </div>

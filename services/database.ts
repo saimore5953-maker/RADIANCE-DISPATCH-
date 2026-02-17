@@ -16,7 +16,7 @@ class DispatchDatabase {
         
         // Dispatch Table
         const dispatchStore = db.createObjectStore('dispatches', { keyPath: 'dispatch_id' });
-        dispatchStore.createIndex('dispatch_no', 'dispatch_no', { unique: true });
+        dispatchStore.createIndex('dispatch_no', 'dispatch_no', { unique: false });
         dispatchStore.createIndex('status', 'status');
         
         // Scans Table
@@ -42,20 +42,6 @@ class DispatchDatabase {
         const result = request.result || { id: 1, next_dispatch_no: 1 };
         const next = result.next_dispatch_no;
         store.put({ id: 1, next_dispatch_no: next + 1 });
-        resolve(next);
-      };
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  async getDailySeq(dateKey: string): Promise<number> {
-    const store = this.getStore('counters', 'readwrite');
-    return new Promise((resolve, reject) => {
-      const request = store.get(dateKey);
-      request.onsuccess = () => {
-        const result = request.result || { id: dateKey, seq: 1 };
-        const next = result.seq;
-        store.put({ id: dateKey, seq: next + 1 });
         resolve(next);
       };
       request.onerror = () => reject(request.error);
@@ -117,40 +103,15 @@ class DispatchDatabase {
     });
   }
 
-  async finalizeSync(oldId: string, newId: string, newNo: number): Promise<void> {
-    if (!this.db) return;
-    const dispatch = await this.getDispatchById(oldId);
+  async markAsSynced(dispatchId: string): Promise<void> {
+    const dispatch = await this.getDispatchById(dispatchId);
     if (!dispatch) return;
     
-    const scans = await this.getScansForDispatch(oldId);
+    dispatch.sheets_synced = true;
+    dispatch.sheets_synced_at = new Date().toISOString();
+    dispatch.status = DispatchStatus.COMPLETED;
     
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(['dispatches', 'scans'], 'readwrite');
-      const dStore = tx.objectStore('dispatches');
-      const sStore = tx.objectStore('scans');
-      
-      // 1. Delete old dispatch entry
-      dStore.delete(oldId);
-      
-      // 2. Add new updated dispatch entry
-      const updatedDispatch = { 
-        ...dispatch, 
-        dispatch_id: newId, 
-        dispatch_no: newNo,
-        sheets_synced: true,
-        sheets_synced_at: new Date().toISOString(),
-        status: DispatchStatus.COMPLETED
-      };
-      dStore.add(updatedDispatch);
-      
-      // 3. Update all scans with new dispatch_id
-      scans.forEach(scan => {
-        sStore.put({ ...scan, dispatch_id: newId });
-      });
-
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
+    await this.updateDispatch(dispatch);
   }
 
   async removeOneScan(dispatchId: string, partNo: string): Promise<void> {
@@ -218,10 +179,6 @@ class DispatchDatabase {
     dispatch.total_boxes_cached = scans.length;
     dispatch.total_qty_cached = totalQty;
     dispatch.parts_count_cached = uniqueParts.size;
-    
-    if (dispatch.status === DispatchStatus.COMPLETED) {
-      dispatch.exports_outdated = true;
-    }
     
     await this.updateDispatch(dispatch);
   }
