@@ -146,18 +146,25 @@ const DispatchDetailScreen: React.FC<Props> = ({
     logger.info('Initiating spreadsheet sync...');
 
     try {
-      // We need to read the JSON response to get the assigned IDs.
-      // This requires the Apps Script to handle CORS correctly or using a direct POST if allowed.
+      // CRITICAL: We use Content-Type: text/plain to avoid preflight OPTIONS request
+      // which Google Apps Script does not support. This is the standard pattern for
+      // successfully reading responses from GAS in a cross-origin production environment.
       const response = await fetch(webhookUrl, {
         method: 'POST',
-        // Note: Mode 'cors' is required to read the response. 
-        // If the Apps Script isn't configured for CORS, this might throw a preflight error.
+        mode: 'cors',
+        headers: {
+          'Content-Type': 'text/plain',
+        },
         body: JSON.stringify(payload)
       });
 
-      if (!response.ok) throw new Error("Server responded with error " + response.status);
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "Unknown error");
+        throw new Error(`Server error (${response.status}): ${errorText.slice(0, 50)}`);
+      }
       
       const resData = await response.json();
+      logger.info('Sync response received', resData);
       
       if (resData.ok) {
         if (resData.duplicate) {
@@ -170,23 +177,25 @@ const DispatchDetailScreen: React.FC<Props> = ({
         const newId = resData.dispatch_id;
         const newNo = resData.dispatch_no;
 
+        if (!newId || !newNo) {
+          throw new Error("Sync succeeded but IDs were not returned by server.");
+        }
+
         await dbService.finalizeSync(dispatch.dispatch_id, newId, newNo);
         
         // Refresh local state and inform parent
         const updated = await dbService.getDispatchById(newId);
         if (updated) {
-          setDispatch(updated);
+          if (isMounted.current) setDispatch(updated);
           onSyncSuccess?.(newId);
           showToast("Sync Successful. IDs Assigned.", "success");
         }
       } else {
-        throw new Error(resData.error || "Sync failed");
+        throw new Error(resData.error || "Server logic failed");
       }
     } catch (err: any) {
       logger.error('Upload failed.', err);
-      // Fallback: If CORS preflight fails (common for Google Script), 
-      // the user will see 'Failed to fetch'.
-      showToast(`Sync error: ${err.message || 'Network limitation'}. Check script CORS settings.`, "error");
+      showToast(`Sync failed: ${err.message || 'Check network connection'}`, "error");
     } finally {
       if (isMounted.current) setIsUploading(false);
     }
