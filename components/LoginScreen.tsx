@@ -7,7 +7,7 @@ interface Props {
 
 const PIN_MAP: Record<string, string> = {
   '0001': 'Prajval Kulkarni',
-  '0002': 'Ravi Kumar',
+  '0002': 'Ravi Tiwari',
   '0003': 'Sai More',
 };
 

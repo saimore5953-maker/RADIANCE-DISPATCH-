@@ -14,17 +14,18 @@ interface Props {
   dispatchId: string;
   onBack: () => void;
   onContinueScanning?: (dispatch: Dispatch) => void;
+  onSyncSuccess?: (newId: string) => void;
 }
 
 const DispatchDetailScreen: React.FC<Props> = ({ 
   dispatchId, 
   onBack, 
-  onContinueScanning
+  onContinueScanning,
+  onSyncSuccess
 }) => {
   const [dispatch, setDispatch] = useState<Dispatch | null>(null);
   const [scans, setScans] = useState<ScanRecord[]>([]);
   const [activeTab, setActiveTab] = useState<'SUMMARY' | 'LOG' | 'EDIT'>('SUMMARY');
-  const [isFinalizing, setIsFinalizing] = useState(false);
   const [showFinalizeOptions, setShowFinalizeOptions] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
@@ -46,6 +47,7 @@ const DispatchDetailScreen: React.FC<Props> = ({
 
   const load = async () => {
     const d = await dbService.getDispatchById(dispatchId);
+    if (!d) return;
     const s = await dbService.getScansForDispatch(dispatchId);
     if (isMounted.current) {
       setDispatch(d);
@@ -109,24 +111,7 @@ const DispatchDetailScreen: React.FC<Props> = ({
     showToast("Manual entries added", "success");
   };
 
-  const confirmFinalize = async () => {
-    setIsFinalizing(true);
-    const updated = { 
-      ...dispatch, 
-      status: DispatchStatus.COMPLETED, 
-      end_time: new Date().toISOString() 
-    };
-    await dbService.updateDispatch(updated);
-    if (isMounted.current) {
-      setDispatch(updated);
-      setIsFinalizing(false);
-    }
-  };
-
   const handleDownload = async () => {
-    if (dispatch.status !== DispatchStatus.COMPLETED) {
-        await confirmFinalize();
-    }
     const res = await generateExports(dispatch, scans, summaryList);
     triggerDownload(res.excel);
   };
@@ -136,21 +121,14 @@ const DispatchDetailScreen: React.FC<Props> = ({
     const webhookUrl = settings.webhookUrl;
 
     if (!webhookUrl) {
-      alert("Webhook URL not configured in Settings.");
+      alert("Webhook URL not configured.");
       return;
-    }
-
-    if (dispatch.status !== DispatchStatus.COMPLETED) {
-        await confirmFinalize();
     }
 
     setIsUploading(true);
     
-    // PAYLOAD: Sending raw ISO strings for dates as requested for maximum reliability.
     const payload = {
-      dispatch_no: dispatch.dispatch_no,
-      dispatch_id: dispatch.dispatch_id,
-      completed_at: dispatch.end_time || new Date().toISOString(),
+      completed_at: new Date().toISOString(),
       customer_name: dispatch.customer_name,
       dispatch_executive: dispatch.operator_id,
       driver_name: dispatch.driver_name,
@@ -165,34 +143,50 @@ const DispatchDetailScreen: React.FC<Props> = ({
       }))
     };
 
-    logger.info('Initiating spreadsheet upload...', { dispatch_id: dispatch.dispatch_id });
+    logger.info('Initiating spreadsheet sync...');
 
     try {
-      // MODE: 'no-cors' is mandatory for Google Apps Script to work across all mobile browsers.
-      // HEADERS: 'text/plain' prevents the browser from sending an OPTIONS preflight request.
-      await fetch(webhookUrl, {
+      // We need to read the JSON response to get the assigned IDs.
+      // This requires the Apps Script to handle CORS correctly or using a direct POST if allowed.
+      const response = await fetch(webhookUrl, {
         method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
+        // Note: Mode 'cors' is required to read the response. 
+        // If the Apps Script isn't configured for CORS, this might throw a preflight error.
         body: JSON.stringify(payload)
       });
 
-      // In no-cors mode, the response is opaque. If fetch doesn't throw, we assume success.
-      const updated = { 
-        ...dispatch, 
-        sheets_synced: true, 
-        sheets_synced_at: new Date().toISOString() 
-      };
-      await dbService.updateDispatch(updated);
+      if (!response.ok) throw new Error("Server responded with error " + response.status);
       
-      if (isMounted.current) {
-        setDispatch(updated);
-        showToast("Upload requested successfully", "success");
+      const resData = await response.json();
+      
+      if (resData.ok) {
+        if (resData.duplicate) {
+          showToast("Duplicate detected (Same Day, Part + Qty). Not uploaded.", "error");
+          setIsUploading(false);
+          return;
+        }
+
+        // SYNC SUCCESS: Server assigned real IDs
+        const newId = resData.dispatch_id;
+        const newNo = resData.dispatch_no;
+
+        await dbService.finalizeSync(dispatch.dispatch_id, newId, newNo);
+        
+        // Refresh local state and inform parent
+        const updated = await dbService.getDispatchById(newId);
+        if (updated) {
+          setDispatch(updated);
+          onSyncSuccess?.(newId);
+          showToast("Sync Successful. IDs Assigned.", "success");
+        }
+      } else {
+        throw new Error(resData.error || "Sync failed");
       }
-      logger.info('Upload triggered successfully (no-cors mode).');
     } catch (err: any) {
       logger.error('Upload failed.', err);
-      showToast(`Upload failed: ${err.message || 'Network error'}`, "error");
+      // Fallback: If CORS preflight fails (common for Google Script), 
+      // the user will see 'Failed to fetch'.
+      showToast(`Sync error: ${err.message || 'Network limitation'}. Check script CORS settings.`, "error");
     } finally {
       if (isMounted.current) setIsUploading(false);
     }
@@ -321,14 +315,14 @@ const DispatchDetailScreen: React.FC<Props> = ({
       <div className="fixed bottom-0 inset-x-0 p-4 bg-slate-800/90 backdrop-blur-md border-t border-white/5 z-40 pb-8">
         {activeTab === 'SUMMARY' && (
           <button 
-            disabled={scans.length === 0 || isFinalizing}
+            disabled={scans.length === 0}
             onClick={() => {
               if (scans.length === 0) alert("No items to finalize");
               else setShowFinalizeOptions(true);
             }} 
             className="btn btn-primary btn-block h-16 rounded-2xl text-sm font-bold tracking-widest uppercase shadow-xl border-none"
           >
-            {isFinalizing ? 'Finalizing...' : 'Finalize'}
+            Finalize
           </button>
         )}
         {activeTab === 'LOG' && (
@@ -355,38 +349,46 @@ const DispatchDetailScreen: React.FC<Props> = ({
       {showFinalizeOptions && (
         <div className="modal modal-open modal-bottom">
           <div className="modal-box bg-slate-800 rounded-t-3xl p-8 text-white border-t border-white/10">
-            <h3 className="text-xl font-bold uppercase tracking-widest mb-8 text-center">Batch Finalize Options</h3>
-            <div className="space-y-3">
+            <h3 className="text-xl font-bold uppercase tracking-widest mb-8 text-center">Batch Finalize Actions</h3>
+            <div className="space-y-4">
+              {/* Action 1: Upload (Mandatory for Assigning IDs) */}
               <button 
-                onClick={() => { setShowFinalizeOptions(false); handleDownload(); }} 
-                className="btn btn-lg btn-block bg-blue-600 hover:bg-blue-700 text-white border-none flex justify-start gap-4 h-20 rounded-2xl px-6"
-              >
-                <div className="bg-white/20 p-2 rounded-xl shadow-inner"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg></div>
-                <div className="text-left">
-                  <p className="font-bold text-sm uppercase tracking-tight">Download Excel</p>
-                  <p className="text-[9px] opacity-60 font-bold uppercase tracking-widest">Local Packing Slip</p>
-                </div>
-              </button>
-              
-              <button 
-                disabled={isUploading}
+                disabled={isUploading || dispatch.sheets_synced}
                 onClick={handleUploadToSheet} 
-                className={`btn btn-lg btn-block text-white border-none flex justify-start gap-4 h-20 rounded-2xl px-6 transition-all ${dispatch.sheets_synced ? 'bg-emerald-700' : 'bg-emerald-600 hover:bg-emerald-500'} disabled:bg-slate-700 disabled:opacity-50`}
+                className={`btn btn-lg btn-block text-white border-none flex justify-start gap-4 h-20 rounded-2xl px-6 transition-all ${dispatch.sheets_synced ? 'bg-emerald-700' : 'bg-blue-600 hover:bg-blue-500'} disabled:bg-slate-700`}
               >
                 <div className="bg-white/20 p-2 rounded-xl shadow-inner">
-                  {isUploading ? <span className="loading loading-spinner loading-xs"></span> : <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>}
+                  {isUploading ? <span className="loading loading-spinner loading-xs"></span> : (dispatch.sheets_synced ? '✅' : <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0l-4 4m4-4v12" /></svg>)}
                 </div>
                 <div className="text-left">
                   <p className="font-bold text-sm uppercase tracking-tight">
-                    {isUploading ? 'Uploading...' : (dispatch.sheets_synced ? 'Uploaded ✅' : 'Upload to Spreadsheet')}
+                    {isUploading ? 'Uploading...' : (dispatch.sheets_synced ? 'Uploaded Successfully' : 'Upload to Spreadsheet')}
                   </p>
                   <p className="text-[9px] opacity-60 font-bold uppercase tracking-widest">
-                    {isUploading ? 'Contacting Server...' : 'Cloud Data Sync'}
+                    {dispatch.sheets_synced ? 'Sheet synced at ' + new Date(dispatch.sheets_synced_at!).toLocaleTimeString() : 'Assigns Dispatch No & ID'}
                   </p>
                 </div>
               </button>
 
-              <button onClick={() => setShowFinalizeOptions(false)} className="btn btn-ghost btn-block mt-4 text-slate-500 font-bold uppercase text-xs tracking-widest h-12">BACK</button>
+              {/* Action 2: Download (Locked until Upload) */}
+              <div className="space-y-2">
+                <button 
+                  disabled={!dispatch.sheets_synced}
+                  onClick={() => { setShowFinalizeOptions(false); handleDownload(); }} 
+                  className={`btn btn-lg btn-block text-white border-none flex justify-start gap-4 h-20 rounded-2xl px-6 ${dispatch.sheets_synced ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-700 cursor-not-allowed opacity-50'}`}
+                >
+                  <div className="bg-white/20 p-2 rounded-xl shadow-inner"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg></div>
+                  <div className="text-left">
+                    <p className="font-bold text-sm uppercase tracking-tight">Download Packing Slip</p>
+                    <p className="text-[9px] opacity-60 font-bold uppercase tracking-widest">Excel Export (A4 Ready)</p>
+                  </div>
+                </button>
+                {!dispatch.sheets_synced && (
+                  <p className="text-center text-[8px] font-bold text-amber-500 uppercase tracking-widest">Upload first to assign Dispatch No and ID</p>
+                )}
+              </div>
+
+              <button onClick={() => setShowFinalizeOptions(false)} className="btn btn-ghost btn-block mt-4 text-slate-500 font-bold uppercase text-xs tracking-widest h-12">CANCEL</button>
             </div>
           </div>
           <div className="modal-backdrop bg-black/70" onClick={() => setShowFinalizeOptions(false)}></div>

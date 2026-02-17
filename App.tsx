@@ -46,16 +46,14 @@ const App: React.FC = () => {
 
   const finalizeCreateDispatch = async (logistics: { driver_name: string; driver_mobile: string; vehicle_no: string; lr_no: string }) => {
     if (!tempCustomer) return;
-    const nextNo = await dbService.getNextDispatchNo();
-    const date = new Date();
-    const dateKey = date.toISOString().slice(0, 10).replace(/-/g, '');
-    const dailySeq = await dbService.getDailySeq(dateKey);
-    const dateStr = date.toISOString().slice(2, 10).replace(/-/g, '');
     
+    // New logic: Use a temporary unique ID for the draft. 
+    // Dispatch No and ID will be assigned by the server upon sync.
+    const tempUuid = crypto.randomUUID();
     const newDispatch: Dispatch = {
-      id: crypto.randomUUID(),
-      dispatch_no: nextNo,
-      dispatch_id: `DSP-${dateStr}-${String(dailySeq).padStart(2, '0')}`,
+      id: tempUuid,
+      dispatch_no: 0, // Placeholder
+      dispatch_id: `DRAFT-${tempUuid.slice(0, 8).toUpperCase()}`, // Temporary internal key
       operator_id: auth.operatorId || 'UNKNOWN',
       customer_name: tempCustomer,
       driver_name: logistics.driver_name,
@@ -124,6 +122,7 @@ const App: React.FC = () => {
           dispatchId={selectedDispatchId} 
           onBack={() => setCurrentView('HISTORY')}
           onContinueScanning={resumeDispatch}
+          onSyncSuccess={(newId) => setSelectedDispatchId(newId)}
         />
       )}
     </div>

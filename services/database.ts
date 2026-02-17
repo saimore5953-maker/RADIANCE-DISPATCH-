@@ -103,6 +103,42 @@ class DispatchDatabase {
     });
   }
 
+  async finalizeSync(oldId: string, newId: string, newNo: number): Promise<void> {
+    if (!this.db) return;
+    const dispatch = await this.getDispatchById(oldId);
+    if (!dispatch) return;
+    
+    const scans = await this.getScansForDispatch(oldId);
+    
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(['dispatches', 'scans'], 'readwrite');
+      const dStore = tx.objectStore('dispatches');
+      const sStore = tx.objectStore('scans');
+      
+      // 1. Delete old dispatch entry
+      dStore.delete(oldId);
+      
+      // 2. Add new updated dispatch entry
+      const updatedDispatch = { 
+        ...dispatch, 
+        dispatch_id: newId, 
+        dispatch_no: newNo,
+        sheets_synced: true,
+        sheets_synced_at: new Date().toISOString(),
+        status: DispatchStatus.COMPLETED
+      };
+      dStore.add(updatedDispatch);
+      
+      // 3. Update all scans with new dispatch_id
+      scans.forEach(scan => {
+        sStore.put({ ...scan, dispatch_id: newId });
+      });
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
   async removeOneScan(dispatchId: string, partNo: string): Promise<void> {
     const scans = await this.getScansForDispatch(dispatchId);
     const partScans = scans.filter(s => s.part_no === partNo);
@@ -140,7 +176,6 @@ class DispatchDatabase {
     const dispatchStore = tx.objectStore('dispatches');
     const scanStore = tx.objectStore('scans');
 
-    // 1. Delete all scans linked to this dispatch
     const scanIndex = scanStore.index('dispatch_id');
     const request = scanIndex.getAllKeys(dispatchId);
     
@@ -148,7 +183,6 @@ class DispatchDatabase {
       request.onsuccess = () => {
         const keys = request.result;
         keys.forEach(key => scanStore.delete(key));
-        // 2. Delete the dispatch record
         dispatchStore.delete(dispatchId);
       };
       tx.oncomplete = () => resolve();
@@ -168,7 +202,6 @@ class DispatchDatabase {
     dispatch.total_qty_cached = totalQty;
     dispatch.parts_count_cached = uniqueParts.size;
     
-    // Patch 1: Mark exports as outdated if editing a completed dispatch
     if (dispatch.status === DispatchStatus.COMPLETED) {
       dispatch.exports_outdated = true;
     }
