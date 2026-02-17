@@ -36,7 +36,7 @@ class DispatchDatabase {
 
   async getNextDispatchNo(): Promise<number> {
     const store = this.getStore('counters', 'readwrite');
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const request = store.get(1);
       request.onsuccess = () => {
         const result = request.result || { id: 1, next_dispatch_no: 1 };
@@ -44,12 +44,13 @@ class DispatchDatabase {
         store.put({ id: 1, next_dispatch_no: next + 1 });
         resolve(next);
       };
+      request.onerror = () => reject(request.error);
     });
   }
 
   async getDailySeq(dateKey: string): Promise<number> {
     const store = this.getStore('counters', 'readwrite');
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const request = store.get(dateKey);
       request.onsuccess = () => {
         const result = request.result || { id: dateKey, seq: 1 };
@@ -57,49 +58,62 @@ class DispatchDatabase {
         store.put({ id: dateKey, seq: next + 1 });
         resolve(next);
       };
+      request.onerror = () => reject(request.error);
     });
   }
 
   async createDispatch(dispatch: Dispatch): Promise<void> {
     const store = this.getStore('dispatches', 'readwrite');
-    return new Promise((resolve) => {
-      store.add(dispatch).onsuccess = () => resolve();
+    return new Promise((resolve, reject) => {
+      const req = store.add(dispatch);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
     });
   }
 
   async getAllDispatches(): Promise<Dispatch[]> {
     const store = this.getStore('dispatches', 'readonly');
-    return new Promise((resolve) => {
-      store.getAll().onsuccess = (e) => resolve((e.target as any).result);
+    return new Promise((resolve, reject) => {
+      const req = store.getAll();
+      req.onsuccess = (e) => resolve((e.target as any).result);
+      req.onerror = () => reject(req.error);
     });
   }
 
   async getDispatchById(id: string): Promise<Dispatch | null> {
     const store = this.getStore('dispatches', 'readonly');
-    return new Promise((resolve) => {
-      store.get(id).onsuccess = (e) => resolve((e.target as any).result);
+    return new Promise((resolve, reject) => {
+      const req = store.get(id);
+      req.onsuccess = (e) => resolve((e.target as any).result);
+      req.onerror = () => reject(req.error);
     });
   }
 
   async addScan(scan: ScanRecord): Promise<void> {
     const store = this.getStore('scans', 'readwrite');
-    return new Promise((resolve) => {
-      store.add(scan).onsuccess = () => resolve();
+    return new Promise((resolve, reject) => {
+      const req = store.add(scan);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
     });
   }
 
   async getScansForDispatch(dispatchId: string): Promise<ScanRecord[]> {
     const store = this.getStore('scans', 'readonly');
     const index = store.index('dispatch_id');
-    return new Promise((resolve) => {
-      index.getAll(dispatchId).onsuccess = (e) => resolve((e.target as any).result);
+    return new Promise((resolve, reject) => {
+      const req = index.getAll(dispatchId);
+      req.onsuccess = (e) => resolve((e.target as any).result);
+      req.onerror = () => reject(req.error);
     });
   }
 
   async updateDispatch(dispatch: Dispatch): Promise<void> {
     const store = this.getStore('dispatches', 'readwrite');
-    return new Promise((resolve) => {
-      store.put(dispatch).onsuccess = () => resolve();
+    return new Promise((resolve, reject) => {
+      const req = store.put(dispatch);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
     });
   }
 
@@ -147,9 +161,10 @@ class DispatchDatabase {
     const latest = partScans.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
     
     const store = this.getStore('scans', 'readwrite');
-    await new Promise((resolve) => {
+    await new Promise((resolve, reject) => {
       const req = store.delete(latest.id);
       req.onsuccess = () => resolve(null);
+      req.onerror = () => reject(req.error);
     });
     
     await this.recalculateDispatchTotals(dispatchId);
@@ -162,8 +177,10 @@ class DispatchDatabase {
     
     const store = this.getStore('scans', 'readwrite');
     for (const scan of partScans) {
-      await new Promise((resolve) => {
-        store.delete(scan.id).onsuccess = () => resolve(null);
+      await new Promise((resolve, reject) => {
+        const req = store.delete(scan.id);
+        req.onsuccess = () => resolve(null);
+        req.onerror = () => reject(req.error);
       });
     }
     

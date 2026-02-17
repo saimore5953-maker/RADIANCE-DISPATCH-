@@ -12,6 +12,18 @@ import LogisticsDetailsScreen from './components/LogisticsDetailsScreen';
 import SettingsScreen from './components/SettingsScreen';
 import { logger } from './services/logger';
 
+// Robust UUID fallback for non-secure contexts (http) where crypto.randomUUID is not available
+const generateUUID = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
 const App: React.FC = () => {
   const [auth, setAuth] = useState<AuthState>({ operatorId: null, isLoggedIn: false });
   const [currentView, setCurrentView] = useState<'LOGIN' | 'HOME' | 'SCAN' | 'HISTORY' | 'DETAIL' | 'SUMMARY' | 'CUSTOMER_SELECT' | 'LOGISTICS_DETAILS' | 'SETTINGS'>('LOGIN');
@@ -24,7 +36,10 @@ const App: React.FC = () => {
     dbService.init().then(() => {
       setIsDbReady(true);
       logger.info('Digital Core initialized.');
-    }).catch(err => logger.error('Core init failed.', err));
+    }).catch(err => {
+      logger.error('Core init failed.', err);
+      alert("Database initialization failed. Please reload the app.");
+    });
   }, []);
 
   const handleLogin = (id: string) => {
@@ -47,30 +62,34 @@ const App: React.FC = () => {
   const finalizeCreateDispatch = async (logistics: { driver_name: string; driver_mobile: string; vehicle_no: string; lr_no: string }) => {
     if (!tempCustomer) return;
     
-    // New logic: Use a temporary unique ID for the draft. 
-    // Dispatch No and ID will be assigned by the server upon sync.
-    const tempUuid = crypto.randomUUID();
-    const newDispatch: Dispatch = {
-      id: tempUuid,
-      dispatch_no: 0, // Placeholder
-      dispatch_id: `DRAFT-${tempUuid.slice(0, 8).toUpperCase()}`, // Temporary internal key
-      operator_id: auth.operatorId || 'UNKNOWN',
-      customer_name: tempCustomer,
-      driver_name: logistics.driver_name,
-      driver_mobile: logistics.driver_mobile,
-      vehicle_no: logistics.vehicle_no,
-      lr_no: logistics.lr_no,
-      start_time: new Date().toISOString(),
-      status: DispatchStatus.DRAFT,
-      total_boxes_cached: 0,
-      total_qty_cached: 0,
-      parts_count_cached: 0,
-    };
-    
-    await dbService.createDispatch(newDispatch);
-    setActiveDispatch(newDispatch);
-    setCurrentView('SCAN');
-    setTempCustomer(null);
+    try {
+      // Use robust UUID generator
+      const tempUuid = generateUUID();
+      const newDispatch: Dispatch = {
+        id: tempUuid,
+        dispatch_no: 0, // Placeholder
+        dispatch_id: `DRAFT-${tempUuid.slice(0, 8).toUpperCase()}`, // Temporary internal key
+        operator_id: auth.operatorId || 'UNKNOWN',
+        customer_name: tempCustomer,
+        driver_name: logistics.driver_name,
+        driver_mobile: logistics.driver_mobile,
+        vehicle_no: logistics.vehicle_no,
+        lr_no: logistics.lr_no,
+        start_time: new Date().toISOString(),
+        status: DispatchStatus.DRAFT,
+        total_boxes_cached: 0,
+        total_qty_cached: 0,
+        parts_count_cached: 0,
+      };
+      
+      await dbService.createDispatch(newDispatch);
+      setActiveDispatch(newDispatch);
+      setCurrentView('SCAN');
+      setTempCustomer(null);
+    } catch (err) {
+      logger.error('Failed to create dispatch session.', err);
+      alert("Error: Could not start scan session. Please try again.");
+    }
   };
 
   const resumeDispatch = (dispatch: Dispatch) => {
