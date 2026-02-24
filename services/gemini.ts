@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import { OCRResult } from "../types";
 import { settingsService } from "./settingsService";
 import { logger } from "./logger";
@@ -26,17 +26,18 @@ export async function performOCR(base64Image: string): Promise<OCRResult> {
         contents: {
           parts: [
             { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
-            { text: 'Extract the Part Number, Part Name, and Quantity from this industrial dispatch tag. Look for anchors like "PART NO", "PART NAME", and "QTY" or "NOS". Return JSON with keys: partNo, partName, qty.' },
+            { text: 'OCR this industrial tag. Extract: Part Number (partNo), Part Name (partName), Quantity (qty). Return JSON only.' },
           ],
         },
         config: {
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
             properties: {
-              partNo: { type: Type.STRING, description: "The alphanumeric part number" },
-              partName: { type: Type.STRING, description: "The descriptive name of the part" },
-              qty: { type: Type.INTEGER, description: "The numeric quantity" }
+              partNo: { type: Type.STRING },
+              partName: { type: Type.STRING },
+              qty: { type: Type.INTEGER }
             },
             required: ["partNo", "partName", "qty"]
           }

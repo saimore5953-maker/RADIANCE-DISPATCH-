@@ -134,9 +134,9 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
       const offsetX = (vW * scale - uiW) / 2;
       const offsetY = (vH * scale - uiH) / 2;
 
-      const padding = 48; 
+      const padding = 32; 
       const vpw = uiW - (padding * 2);
-      const vph = vpw * 0.75; 
+      const vph = vpw * 0.4; 
       const vpx = padding;
       const vpy = (uiH - vph) / 2;
 
@@ -153,7 +153,7 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
 
       if (sw <= 0 || sh <= 0) throw new Error("Invalid viewport calculation");
 
-      const MAX_EDGE = 1024;
+      const MAX_EDGE = 800;
       let targetWidth = sw;
       let targetHeight = sh;
 
@@ -254,12 +254,18 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
         <canvas ref={canvasRef} className="hidden" />
         
         {settings.showOcrViewport && (
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-12">
-            <div className="w-full aspect-[4/3] border-2 border-white/20 rounded-3xl relative shadow-[0_0_0_2000px_rgba(0,0,0,0.6)]">
+          <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-8">
+            <div className="w-full aspect-[2.5/1] border-2 border-white/30 rounded-2xl relative shadow-[0_0_0_2000px_rgba(0,0,0,0.6)]">
               <div className="absolute -top-1 -left-1 w-8 h-8 border-t-4 border-l-4 border-blue-500 rounded-tl-lg"></div>
               <div className="absolute -top-1 -right-1 w-8 h-8 border-t-4 border-r-4 border-blue-500 rounded-tr-lg"></div>
               <div className="absolute -bottom-1 -left-1 w-8 h-8 border-b-4 border-l-4 border-blue-500 rounded-bl-lg"></div>
               <div className="absolute -bottom-1 -right-1 w-8 h-8 border-b-4 border-r-4 border-blue-500 rounded-br-lg"></div>
+              
+              {/* Scanning Animation Line */}
+              <div className="absolute inset-x-0 top-0 h-0.5 bg-blue-400/50 shadow-[0_0_15px_rgba(96,165,250,0.8)] animate-[scan_3s_infinite_linear]"></div>
+            </div>
+            <div className="mt-6 bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10">
+              <p className="text-[10px] text-blue-400 font-black uppercase tracking-[0.2em]">Align Tag within Frame</p>
             </div>
           </div>
         )}

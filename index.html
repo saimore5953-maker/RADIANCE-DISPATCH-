@@ -40,6 +40,16 @@
             background: rgba(255,255,255,0.2);
             border-radius: 4px;
         }
+        @keyframes scan {
+            0% { top: 0; }
+            50% { top: 100%; }
+            100% { top: 0; }
+        }
+
+        @keyframes slide {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(200%); }
+        }
     </style>
     
     <script type="importmap">
@@ -54,10 +64,12 @@
       }
     }
     </script>
+<link rel="stylesheet" href="/index.css">
 </head>
 <body class="antialiased w-screen relative bg-slate-900">
     <div id="root" class="h-full w-full relative z-10"></div>
     <!-- CRITICAL: Added entry point script -->
     <script type="module" src="./index.tsx"></script>
+<script type="module" src="/index.tsx"></script>
 </body>
 </html>

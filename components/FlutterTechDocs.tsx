@@ -70,7 +70,7 @@ const FlutterTechDocs: React.FC<Props> = ({ onBack }) => {
             </li>
             <li className="flex gap-2">
               <span className="text-blue-500 font-bold">04.</span>
-              <span>Performance: Maintain smooth scrolling with >1000 scan records in local SQLite.</span>
+              <span>Performance: Maintain smooth scrolling with &gt;1000 scan records in local SQLite.</span>
             </li>
             <li className="flex gap-2">
               <span className="text-blue-500 font-bold">05.</span>

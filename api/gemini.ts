@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
@@ -24,10 +24,11 @@ export default async function handler(req: any, res: any) {
       contents: {
         parts: [
           { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
-          { text: 'Extract exactly the Part Number, Part Name, and Quantity from this industrial dispatch tag. Look for markers like "PART NO", "DESCRIPTION", and "QTY". Return JSON.' },
+          { text: 'OCR this industrial tag. Extract: Part Number (partNo), Part Name (partName), Quantity (qty). Return JSON only.' },
         ],
       },
       config: {
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
