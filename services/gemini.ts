@@ -17,9 +17,8 @@ export async function performOCR(base64Image: string): Promise<OCRResult> {
     const apiKey = settings.customApiKey.trim();
     logger.info('Performing direct OCR with custom user API key.');
     
+    // Create a new GoogleGenAI instance right before making an API call to ensure it uses the latest key.
     const ai = new GoogleGenAI({ apiKey: apiKey });
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), settings.ocrTimeoutSec * 1000);
 
     try {
       const response = await ai.models.generateContent({
@@ -27,7 +26,7 @@ export async function performOCR(base64Image: string): Promise<OCRResult> {
         contents: {
           parts: [
             { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
-            { text: 'Extract the Part Number, Part Name, and Quantity from this industrial dispatch tag. Look for anchors like "PART NO", "PART NAME", and "QTY" or "NOS". Return JSON.' },
+            { text: 'Extract the Part Number, Part Name, and Quantity from this industrial dispatch tag. Look for anchors like "PART NO", "PART NAME", and "QTY" or "NOS". Return JSON with keys: partNo, partName, qty.' },
           ],
         },
         config: {
@@ -35,17 +34,17 @@ export async function performOCR(base64Image: string): Promise<OCRResult> {
           responseSchema: {
             type: Type.OBJECT,
             properties: {
-              partNo: { type: Type.STRING },
-              partName: { type: Type.STRING },
-              qty: { type: Type.INTEGER }
+              partNo: { type: Type.STRING, description: "The alphanumeric part number" },
+              partName: { type: Type.STRING, description: "The descriptive name of the part" },
+              qty: { type: Type.INTEGER, description: "The numeric quantity" }
             },
             required: ["partNo", "partName", "qty"]
           }
         }
-      }, { signal: controller.signal });
+      });
 
-      clearTimeout(timeoutId);
       const data = JSON.parse(response.text || "{}");
+      logger.info('Direct OCR success', data);
       
       return {
         partNo: data.partNo || "UNKNOWN",
@@ -55,22 +54,26 @@ export async function performOCR(base64Image: string): Promise<OCRResult> {
         rawText: response.text || "",
       };
     } catch (err: any) {
-      clearTimeout(timeoutId);
       logger.error("Direct OCR Service Error", err);
       throw new Error(err.message || "Failed to process image with Gemini AI.");
     }
   } 
   
   // Fallback: Use the secure Serverless Proxy (/api/gemini)
-  // This is required because process.env.API_KEY is not accessible in the browser on Vercel.
   logger.info('Performing OCR via secure system proxy.');
   
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s hard timeout
+
   try {
     const response = await fetch('/api/gemini', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ base64Image })
+      body: JSON.stringify({ base64Image }),
+      signal: controller.signal
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -78,6 +81,7 @@ export async function performOCR(base64Image: string): Promise<OCRResult> {
     }
 
     const data = await response.json();
+    logger.info('Proxy OCR success', data);
     return {
       partNo: data.partNo,
       partName: data.partName,
@@ -86,7 +90,11 @@ export async function performOCR(base64Image: string): Promise<OCRResult> {
       rawText: data.rawText
     };
   } catch (err: any) {
+    clearTimeout(timeoutId);
     logger.error("Proxy OCR Service Error", err);
+    if (err.name === 'AbortError') {
+      throw new Error("OCR timeout: The request took too long. Check your internet connection.");
+    }
     throw new Error(err.message || "Failed to reach OCR proxy server.");
   }
 }
