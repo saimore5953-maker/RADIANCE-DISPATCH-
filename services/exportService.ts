@@ -73,15 +73,14 @@ export async function generateExports(dispatch: Dispatch, scans: ScanRecord[], s
   const now = new Date(dispatch.start_time);
   const dateStr = now.toLocaleDateString('en-GB');
   const timeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  const dispId = dispatch.dispatch_id.startsWith('DRAFT-') ? '' : dispatch.dispatch_id;
 
   const infoRows = [
     [`PARTY NAME : ${dispatch.customer_name}`, `DISP. EXE : ${dispatch.operator_id}`],
     [`DRIVER : ${dispatch.driver_name}`, `DATE : ${dateStr}`],
     [`DRIVER MOB NO : ${dispatch.driver_mobile}`, `TIME : ${timeStr}`],
-    [`VEHICLE NO : ${dispatch.vehicle_no}`, `LOCATION:`],
-    [`LR NO : ${dispatch.lr_no}`, `TRANSPORT:`],
-    [`INVOICE NO:`, `DISP. ID : ${dispId}`]
+    [`VEHICLE NO : ${dispatch.vehicle_no}`, `LOCATION : ${dispatch.location}`],
+    [`LR NO : ${dispatch.lr_no}`, `TRANSPORT : ${dispatch.transport}`],
+    [`INVOICE NO:`, `DISP. ID : ${dispatch.dispatch_id}`]
   ];
 
   infoRows.forEach((rowData) => {

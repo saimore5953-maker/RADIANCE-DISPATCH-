@@ -130,7 +130,10 @@ const DispatchDetailScreen: React.FC<Props> = ({
     
     const payload = {
       completed_at: new Date().toISOString(),
+      dispatch_id: dispatch.dispatch_id,
       customer_name: dispatch.customer_name,
+      location: dispatch.location,
+      transport: dispatch.transport,
       dispatch_executive: dispatch.operator_id,
       driver_name: dispatch.driver_name,
       driver_mobile: dispatch.driver_mobile,
@@ -206,7 +209,7 @@ const DispatchDetailScreen: React.FC<Props> = ({
         <div className="flex-1">
           <div>
             <h2 className="text-[10px] font-bold uppercase text-blue-400 tracking-widest">
-              {dispatch.dispatch_id.startsWith('DRAFT-') ? 'NEW SESSION' : dispatch.dispatch_id}
+              {dispatch.dispatch_id}
             </h2>
             <p className="text-sm font-bold text-white truncate max-w-[180px]">{dispatch.customer_name}</p>
           </div>

@@ -20,6 +20,8 @@ const App: React.FC = () => {
   const [selectedDispatchId, setSelectedDispatchId] = useState<string | null>(null);
   const [isDbReady, setIsDbReady] = useState(false);
   const [tempCustomer, setTempCustomer] = useState<string | null>(null);
+  const [tempLocation, setTempLocation] = useState<string | null>(null);
+  const [tempTransport, setTempTransport] = useState<string | null>(null);
 
   useEffect(() => {
     dbService.init().then(() => {
@@ -43,8 +45,10 @@ const App: React.FC = () => {
 
   const initiateNewDispatch = () => setCurrentView('CUSTOMER_SELECT');
 
-  const handleCustomerSelected = (name: string) => {
+  const handleCustomerSelected = (name: string, location: string, transport: string) => {
     setTempCustomer(name);
+    setTempLocation(location);
+    setTempTransport(transport);
     setCurrentView('LOGISTICS_DETAILS');
   };
 
@@ -56,18 +60,26 @@ const App: React.FC = () => {
     
     try {
       logger.info('Creating new dispatch session...', { customer: tempCustomer });
+      
+      const nextNo = await dbService.getNextDispatchNo();
+      const date = new Date();
+      const dateStr = date.toISOString().slice(2, 10).replace(/-/g, ''); // YYMMDD
+      const uniqueId = `DSP-${dateStr}-${nextNo.toString().padStart(4, '0')}`;
+      
       const tempUuid = generateUUID();
       const newDispatch: Dispatch = {
         id: tempUuid,
-        dispatch_no: 0,
-        dispatch_id: `DRAFT-${tempUuid.slice(0, 8).toUpperCase()}`,
+        dispatch_no: nextNo,
+        dispatch_id: uniqueId,
         operator_id: auth.operatorId || 'UNKNOWN',
         customer_name: tempCustomer,
+        location: tempLocation || '',
+        transport: tempTransport || '',
         driver_name: logistics.driver_name,
         driver_mobile: logistics.driver_mobile,
         vehicle_no: logistics.vehicle_no,
         lr_no: logistics.lr_no,
-        start_time: new Date().toISOString(),
+        start_time: date.toISOString(),
         status: DispatchStatus.DRAFT,
         total_boxes_cached: 0,
         total_qty_cached: 0,
@@ -83,6 +95,8 @@ const App: React.FC = () => {
       setActiveDispatch(newDispatch);
       setCurrentView('SCAN');
       setTempCustomer(null);
+      setTempLocation(null);
+      setTempTransport(null);
     } catch (err: any) {
       logger.error('Failed to create dispatch session.', err);
       alert(`System Error: ${err.message || "Could not start scan session"}. Please try again.`);

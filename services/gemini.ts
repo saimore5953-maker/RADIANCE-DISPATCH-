@@ -1,23 +1,17 @@
 
 import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
-import { OCRResult } from "../types";
+import { OCRResult, VehicleOCRResult } from "../types";
 import { settingsService } from "./settingsService";
 import { logger } from "./logger";
 
 /**
- * Cloud OCR Service
- * Handles both local direct-to-Gemini calls (for custom keys) 
- * and proxied calls (for system keys) to ensure reliable performance on Vercel.
+ * Cloud OCR Service for Industrial Tags
  */
 export async function performOCR(base64Image: string): Promise<OCRResult> {
   const settings = settingsService.getSettings();
   
-  // If custom key is enabled and provided, we call Google directly from the client
   if (settings.useCustomApiKey && settings.customApiKey?.trim()) {
     const apiKey = settings.customApiKey.trim();
-    logger.info('Performing direct OCR with custom user API key.');
-    
-    // Create a new GoogleGenAI instance right before making an API call to ensure it uses the latest key.
     const ai = new GoogleGenAI({ apiKey: apiKey });
 
     try {
@@ -45,8 +39,6 @@ export async function performOCR(base64Image: string): Promise<OCRResult> {
       });
 
       const data = JSON.parse(response.text || "{}");
-      logger.info('Direct OCR success', data);
-      
       return {
         partNo: data.partNo || "UNKNOWN",
         partName: data.partName || "UNKNOWN",
@@ -60,17 +52,66 @@ export async function performOCR(base64Image: string): Promise<OCRResult> {
     }
   } 
   
-  // Fallback: Use the secure Serverless Proxy (/api/gemini)
-  logger.info('Performing OCR via secure system proxy.');
+  return callProxyOCR(base64Image, 'industrial') as Promise<OCRResult>;
+}
+
+/**
+ * Cloud OCR Service for Vehicle Number Plates
+ */
+export async function performVehicleOCR(base64Image: string): Promise<VehicleOCRResult> {
+  const settings = settingsService.getSettings();
   
+  if (settings.useCustomApiKey && settings.customApiKey?.trim()) {
+    const apiKey = settings.customApiKey.trim();
+    const ai = new GoogleGenAI({ apiKey: apiKey });
+
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: {
+          parts: [
+            { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
+            { text: 'OCR this vehicle number plate. Extract the registration number. Return JSON with key "vehicleNo".' },
+          ],
+        },
+        config: {
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              vehicleNo: { type: Type.STRING }
+            },
+            required: ["vehicleNo"]
+          }
+        }
+      });
+
+      const data = JSON.parse(response.text || "{}");
+      return {
+        vehicleNo: data.vehicleNo || "UNKNOWN",
+        confidence: 0.99,
+        rawText: response.text || "",
+      };
+    } catch (err: any) {
+      logger.error("Direct Vehicle OCR Error", err);
+      throw new Error(err.message || "Failed to process vehicle image.");
+    }
+  } 
+  
+  return callProxyOCR(base64Image, 'vehicle') as Promise<VehicleOCRResult>;
+}
+
+async function callProxyOCR(base64Image: string, type: 'industrial' | 'vehicle'): Promise<OCRResult | VehicleOCRResult> {
+  logger.info(`Performing ${type} OCR via secure system proxy.`);
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s hard timeout
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
 
   try {
     const response = await fetch('/api/gemini', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ base64Image }),
+      body: JSON.stringify({ base64Image, type }),
       signal: controller.signal
     });
 
@@ -81,21 +122,10 @@ export async function performOCR(base64Image: string): Promise<OCRResult> {
       throw new Error(errorData.error || `Server Error: ${response.status}`);
     }
 
-    const data = await response.json();
-    logger.info('Proxy OCR success', data);
-    return {
-      partNo: data.partNo,
-      partName: data.partName,
-      qty: data.qty,
-      confidence: data.confidence,
-      rawText: data.rawText
-    };
+    return await response.json();
   } catch (err: any) {
     clearTimeout(timeoutId);
     logger.error("Proxy OCR Service Error", err);
-    if (err.name === 'AbortError') {
-      throw new Error("OCR timeout: The request took too long. Check your internet connection.");
-    }
     throw new Error(err.message || "Failed to reach OCR proxy server.");
   }
 }

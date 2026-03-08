@@ -54,17 +54,21 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
       return;
     }
 
+    // Stop any existing tracks to free up hardware
+    stopCamera();
+
+    // Standard mobile-first constraint set
     const constraintSets = [
       { 
         video: { 
-          facingMode: { exact: 'environment' },
+          facingMode: 'environment',
           width: { ideal: 1280 },
           height: { ideal: 720 }
         } 
       },
       { 
         video: { 
-          facingMode: 'environment' 
+          facingMode: 'user' 
         } 
       },
       { 
@@ -75,28 +79,44 @@ const ScanScreen: React.FC<Props> = ({ dispatch, onBack, onComplete }) => {
     let stream: MediaStream | null = null;
     let lastError: any = null;
 
+    // Try each constraint set until one works
     for (const constraints of constraintSets) {
       try {
         logger.info('Attempting camera access...', constraints);
         stream = await navigator.mediaDevices.getUserMedia(constraints);
-        if (stream) break; 
+        if (stream) {
+          logger.info('Camera stream obtained successfully.');
+          break; 
+        }
       } catch (err: any) {
         lastError = err;
-        logger.warn(`Constraint set failed: ${err.name}`);
+        logger.warn(`Constraint set failed (${err.name}): ${err.message}`);
+        // If it's a permission error, don't bother trying other constraints
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          break;
+        }
       }
     }
 
     if (stream && videoRef.current && isMounted.current) {
       videoRef.current.srcObject = stream;
       try {
+        // Some browsers require a user gesture or a small delay
         await videoRef.current.play();
-        logger.info('Camera active.');
+        logger.info('Camera video playing.');
       } catch (playErr) {
         logger.error('Video play error', playErr);
+        // Fallback for autoplay restrictions
+        videoRef.current.muted = true;
+        await videoRef.current.play().catch(e => logger.error('Muted play also failed', e));
       }
-    } else if (!stream && isMounted.current) {
-      logger.error("Camera access failed", lastError);
-      setErrorMsg("No camera hardware found or matching your device. Check if another app is using it.");
+    } else if (isMounted.current) {
+      const msg = lastError?.name === 'NotAllowedError' 
+        ? "Camera permission denied. Please enable camera access in your browser settings."
+        : `Camera Error: ${lastError?.message || "Requested device not found"}. Please ensure your camera is connected and not in use by another app.`;
+      
+      logger.error("Camera access failed final", lastError);
+      setErrorMsg(msg);
     }
   };
 

@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import VehicleScanModal from './VehicleScanModal';
 
 interface LogisticsData {
   driver_name: string;
@@ -15,6 +16,7 @@ interface Props {
 
 const LogisticsDetailsScreen: React.FC<Props> = ({ onComplete, onBack }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showVehicleScanner, setShowVehicleScanner] = useState(false);
   const [data, setData] = useState<LogisticsData>({
     driver_name: '',
     driver_mobile: '',
@@ -64,6 +66,11 @@ const LogisticsDetailsScreen: React.FC<Props> = ({ onComplete, onBack }) => {
     }
   };
 
+  const handleVehicleScan = (vehicleNo: string) => {
+    setData(prev => ({ ...prev, vehicle_no: vehicleNo.toUpperCase() }));
+    setShowVehicleScanner(false);
+  };
+
   const isValid = 
     data.driver_name.trim().length > 0 && 
     data.driver_mobile.length === 10 && 
@@ -72,6 +79,10 @@ const LogisticsDetailsScreen: React.FC<Props> = ({ onComplete, onBack }) => {
 
   return (
     <div className="flex-1 flex flex-col bg-slate-900 text-white overflow-hidden animate-in fade-in duration-300">
+      {showVehicleScanner && (
+        <VehicleScanModal onScan={handleVehicleScan} onClose={() => setShowVehicleScanner(false)} />
+      )}
+      
       {/* Header */}
       <div className="p-6 bg-slate-800 flex items-center gap-4 sticky top-0 z-10">
         <button onClick={onBack} disabled={isSubmitting} className="p-2 text-slate-400 active:scale-95 transition-all disabled:opacity-30">
@@ -114,14 +125,23 @@ const LogisticsDetailsScreen: React.FC<Props> = ({ onComplete, onBack }) => {
         {/* Vehicle No */}
         <div>
           <label className="block text-[10px] text-slate-500 uppercase font-black tracking-widest mb-2">Vehicle No</label>
-          <input 
-            type="text"
-            disabled={isSubmitting}
-            value={data.vehicle_no}
-            onChange={(e) => setData({ ...data, vehicle_no: e.target.value.toUpperCase() })}
-            className={`w-full bg-slate-800 border-2 rounded-xl px-4 py-4 text-white font-mono focus:ring-2 focus:ring-blue-500 transition-all outline-none ${errors.vehicle_no ? 'border-red-500' : 'border-slate-700'}`}
-            placeholder="e.g. MH12AB1234"
-          />
+          <div className="relative">
+            <input 
+              type="text"
+              disabled={isSubmitting}
+              value={data.vehicle_no}
+              onChange={(e) => setData({ ...data, vehicle_no: e.target.value.toUpperCase() })}
+              className={`w-full bg-slate-800 border-2 rounded-xl px-4 py-4 pr-14 text-white font-mono focus:ring-2 focus:ring-blue-500 transition-all outline-none ${errors.vehicle_no ? 'border-red-500' : 'border-slate-700'}`}
+              placeholder="e.g. MH12AB1234"
+            />
+            <button 
+              type="button"
+              onClick={() => setShowVehicleScanner(true)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-blue-600/20 text-blue-400 rounded-lg hover:bg-blue-600 hover:text-white transition-all active:scale-90"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            </button>
+          </div>
           {errors.vehicle_no && <p className="text-red-500 text-[10px] mt-1 font-bold uppercase">{errors.vehicle_no}</p>}
         </div>
 

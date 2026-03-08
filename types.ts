@@ -17,6 +17,8 @@ export interface Dispatch {
   dispatch_id: string; // DSP-YYMMDD-##
   operator_id: string;
   customer_name: string;
+  location: string;
+  transport: string;
   // Logistics Details (Patch additions)
   driver_name: string;
   driver_mobile: string;
@@ -71,6 +73,12 @@ export interface OCRResult {
   partNo: string;
   partName: string;
   qty: number;
+  confidence: number;
+  rawText: string;
+}
+
+export interface VehicleOCRResult {
+  vehicleNo: string;
   confidence: number;
   rawText: string;
 }

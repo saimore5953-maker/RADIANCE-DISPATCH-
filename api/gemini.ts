@@ -6,15 +6,37 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { base64Image } = req.body;
+  const { base64Image, type = 'industrial' } = req.body;
   if (!base64Image) {
     return res.status(400).json({ error: 'Missing image data' });
   }
 
-  const apiKey = process.env.API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'System API key not configured on server.' });
+    return res.status(500).json({ error: 'System GEMINI_API_KEY not configured on server.' });
   }
+
+  const prompt = type === 'vehicle' 
+    ? 'OCR this vehicle number plate. Extract the registration number. Return JSON with key "vehicleNo".'
+    : 'OCR this industrial tag. Extract: Part Number (partNo), Part Name (partName), Quantity (qty). Return JSON only.';
+
+  const schema = type === 'vehicle'
+    ? {
+        type: Type.OBJECT,
+        properties: {
+          vehicleNo: { type: Type.STRING }
+        },
+        required: ["vehicleNo"]
+      }
+    : {
+        type: Type.OBJECT,
+        properties: {
+          partNo: { type: Type.STRING },
+          partName: { type: Type.STRING },
+          qty: { type: Type.INTEGER }
+        },
+        required: ["partNo", "partName", "qty"]
+      };
 
   try {
     const ai = new GoogleGenAI({ apiKey: apiKey });
@@ -24,26 +46,26 @@ export default async function handler(req: any, res: any) {
       contents: {
         parts: [
           { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
-          { text: 'OCR this industrial tag. Extract: Part Number (partNo), Part Name (partName), Quantity (qty). Return JSON only.' },
+          { text: prompt },
         ],
       },
       config: {
         thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
         responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            partNo: { type: Type.STRING },
-            partName: { type: Type.STRING },
-            qty: { type: Type.INTEGER }
-          },
-          required: ["partNo", "partName", "qty"]
-        }
+        responseSchema: schema
       }
     });
 
     const data = JSON.parse(response.text || "{}");
     
+    if (type === 'vehicle') {
+      return res.status(200).json({
+        vehicleNo: data.vehicleNo || "UNKNOWN",
+        confidence: 0.99,
+        rawText: response.text || "",
+      });
+    }
+
     return res.status(200).json({
       partNo: data.partNo || "UNKNOWN",
       partName: data.partName || "UNKNOWN",
