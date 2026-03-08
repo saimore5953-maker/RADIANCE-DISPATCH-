@@ -90,21 +90,22 @@ const VehicleScanModal: React.FC<Props> = ({ onScan, onClose }) => {
       const vW = video.videoWidth;
       const vH = video.videoHeight;
       
-      // Capture the center area (Square 1:1)
-      const sw = Math.min(vW, vH) * 0.8;
-      const sh = sw; 
+      // Capture the center area
+      const sw = vW * 0.8;
+      const sh = sw * 0.3;
       const sx = (vW - sw) / 2;
       const sy = (vH - sh) / 2;
 
       canvasRef.current.width = 800;
-      canvasRef.current.height = 800;
+      canvasRef.current.height = (sh / sw) * 800;
       
-      context.drawImage(video, sx, sy, sw, sh, 0, 0, 800, 800);
+      context.drawImage(video, sx, sy, sw, sh, 0, 0, canvasRef.current.width, canvasRef.current.height);
       const base64 = canvasRef.current.toDataURL('image/jpeg', 0.8).split(',')[1];
       
       const result = await performVehicleOCR(base64);
       if (result.vehicleNo && result.vehicleNo !== "UNKNOWN") {
-        onScan(result.vehicleNo);
+        const cleaned = result.vehicleNo.toUpperCase().replace(/\s/g, '');
+        onScan(cleaned);
       } else {
         alert("Could not read number plate. Please try again.");
       }
@@ -129,9 +130,9 @@ const VehicleScanModal: React.FC<Props> = ({ onScan, onClose }) => {
         <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover" />
         <canvas ref={canvasRef} className="hidden" />
         
-        {/* Viewport Overlay (Square 1:1) */}
+        {/* Viewport Overlay */}
         <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-8">
-          <div className="w-full max-w-[300px] aspect-square border-2 border-blue-500/50 rounded-xl relative shadow-[0_0_0_2000px_rgba(0,0,0,0.7)]">
+          <div className="w-full aspect-[3/1] border-2 border-blue-500/50 rounded-xl relative shadow-[0_0_0_2000px_rgba(0,0,0,0.7)]">
             <div className="absolute inset-x-0 top-0 h-0.5 bg-blue-400/50 shadow-[0_0_15px_rgba(96,165,250,0.8)] animate-[scan_2s_infinite_linear]"></div>
           </div>
           <p className="mt-6 text-[10px] text-blue-400 font-black uppercase tracking-widest bg-black/40 px-4 py-2 rounded-full">Align Number Plate in Frame</p>

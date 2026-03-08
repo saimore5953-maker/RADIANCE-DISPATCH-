@@ -35,11 +35,12 @@ const LogisticsDetailsScreen: React.FC<Props> = ({ onComplete, onBack }) => {
       newErrors.driver_mobile = 'Mobile number must be exactly 10 digits';
     }
     
-    // Relaxed validation: Just check if it's not empty and basic alphanumeric
+    // Validation for format: TWO LETTERS, 2-DIGIT NUMBER (01-99), ONE OR TWO LETTERS, 4-DIGIT NUMBER (0001-9999)
+    const vehicleRegex = /^[A-Z]{2}[0-9]{2}[A-Z]{1,2}[0-9]{4}$/;
     if (!data.vehicle_no.trim()) {
         newErrors.vehicle_no = 'Vehicle Number is required';
-    } else if (data.vehicle_no.length < 4) {
-        newErrors.vehicle_no = 'Invalid Vehicle Number';
+    } else if (!vehicleRegex.test(data.vehicle_no.toUpperCase().replace(/\s/g, ''))) {
+        newErrors.vehicle_no = 'Invalid Format (e.g. MH12AB1234)';
     }
     
     if (!data.lr_no.trim()) newErrors.lr_no = 'LR Number is required';
@@ -74,7 +75,7 @@ const LogisticsDetailsScreen: React.FC<Props> = ({ onComplete, onBack }) => {
   const isValid = 
     data.driver_name.trim().length > 0 && 
     data.driver_mobile.length === 10 && 
-    data.vehicle_no.trim().length >= 4 && 
+    /^[A-Z]{2}[0-9]{2}[A-Z]{1,2}[0-9]{4}$/.test(data.vehicle_no.toUpperCase().replace(/\s/g, '')) && 
     data.lr_no.trim().length > 0;
 
   return (

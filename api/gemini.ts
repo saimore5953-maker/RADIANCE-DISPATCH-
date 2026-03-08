@@ -17,7 +17,7 @@ export default async function handler(req: any, res: any) {
   }
 
   const prompt = type === 'vehicle' 
-    ? 'OCR this vehicle number plate. Extract the registration number. Return JSON with key "vehicleNo".'
+    ? 'OCR this vehicle number plate. The format is: TWO LETTERS, 2-DIGIT NUMBER (01-99), ONE OR TWO LETTERS, and 4-DIGIT NUMBER (0001-9999). Example: MH12AB1234. Extract the registration number. Return JSON with key "vehicleNo".'
     : 'OCR this industrial tag. Extract: Part Number (partNo), Part Name (partName), Quantity (qty). Return JSON only.';
 
   const schema = type === 'vehicle'

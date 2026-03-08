@@ -71,7 +71,7 @@ export async function performVehicleOCR(base64Image: string): Promise<VehicleOCR
         contents: {
           parts: [
             { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
-            { text: 'OCR this vehicle number plate. Extract the registration number. Return JSON with key "vehicleNo".' },
+            { text: 'OCR this vehicle number plate. The format is: TWO LETTERS, 2-DIGIT NUMBER (01-99), ONE OR TWO LETTERS, and 4-DIGIT NUMBER (0001-9999). Example: MH12AB1234. Extract the registration number. Return JSON with key "vehicleNo".' },
           ],
         },
         config: {
