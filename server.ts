@@ -24,8 +24,12 @@ app.post('/api/webhook', upload.single('excel'), async (req, res) => {
       const data = JSON.parse(req.body.data);
       const excelFile = req.file;
       
-      if (!BOT_TOKEN || !CHAT_ID) {
-        return res.status(500).json({ ok: false, error: "Bot Token or Chat ID not set in AI Studio Settings" });
+      // Use credentials from request if not in server environment
+      const token = data.bot_token || BOT_TOKEN;
+      const chat_id = data.chat_id || CHAT_ID;
+
+      if (!token || !chat_id) {
+        return res.status(400).json({ ok: false, error: "Telegram Bot Token or Chat ID not provided in request or server settings" });
       }
 
       const totalBoxes = data.summary.reduce((acc: number, s: any) => acc + s.boxes, 0);
@@ -37,24 +41,24 @@ app.post('/api/webhook', upload.single('excel'), async (req, res) => {
 
       if (excelFile) {
         const formData = new FormData();
-        formData.append('chat_id', CHAT_ID);
+        formData.append('chat_id', chat_id);
         formData.append('document', new Blob([excelFile.buffer]), excelFile.originalname || "dispatch.xlsx");
         formData.append('caption', messageText);
         formData.append('parse_mode', 'Markdown');
         formData.append('reply_markup', JSON.stringify(keyboard));
 
-        const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`, {
+        const tgRes = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
           method: 'POST',
           body: formData
         });
         const tgData: any = await tgRes.json();
         if (!tgData.ok) throw new Error(tgData.description);
       } else {
-        const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        const tgRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            chat_id: CHAT_ID,
+            chat_id: chat_id,
             text: messageText,
             parse_mode: 'Markdown',
             reply_markup: keyboard

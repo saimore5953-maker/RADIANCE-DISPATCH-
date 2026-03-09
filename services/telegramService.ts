@@ -21,7 +21,10 @@ export const telegramService = {
         part_name: s.part_name,
         boxes: s.boxes,
         total_qty: s.total_qty
-      }))
+      })),
+      // Pass credentials to the webhook so it doesn't rely solely on server env vars
+      bot_token: telegramBotToken,
+      chat_id: telegramChatId
     };
 
     // Generate Excel for attachment
@@ -47,8 +50,15 @@ export const telegramService = {
         });
 
         if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: 'Webhook rejected request' }));
-          throw new Error(err.error || `Server returned ${res.status}`);
+          const errText = await res.text();
+          let errorMessage = `Server returned ${res.status}`;
+          try {
+            const errJson = JSON.parse(errText);
+            errorMessage = errJson.error || errorMessage;
+          } catch (e) {
+            errorMessage = errText || errorMessage;
+          }
+          throw new Error(errorMessage);
         }
         return true;
       } catch (error: any) {
