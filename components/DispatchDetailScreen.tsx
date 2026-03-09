@@ -4,6 +4,7 @@ import { dbService } from '../services/database';
 import { Dispatch, ScanRecord, PartSummary, DispatchStatus, ScanStatus } from '../types';
 import { generateExports, triggerDownload } from '../services/exportService';
 import { settingsService } from '../services/settingsService';
+import { telegramService } from '../services/telegramService';
 import { logger } from '../services/logger';
 import { generateUUID } from '../services/utils';
 
@@ -29,6 +30,7 @@ const DispatchDetailScreen: React.FC<Props> = ({
   const [activeTab, setActiveTab] = useState<'SUMMARY' | 'LOG' | 'EDIT'>('SUMMARY');
   const [showFinalizeOptions, setShowFinalizeOptions] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isSendingTelegram, setIsSendingTelegram] = useState(false);
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
   const isMounted = useRef(true);
 
@@ -192,6 +194,26 @@ const DispatchDetailScreen: React.FC<Props> = ({
     }
   };
 
+  const handleSendTelegram = async () => {
+    const settings = settingsService.getSettings();
+
+    setIsSendingTelegram(true);
+    try {
+      await telegramService.sendDispatchToTelegram(
+        dispatch,
+        summaryList,
+        scans,
+        settings
+      );
+      showToast("Sent to Telegram!", "success");
+    } catch (err: any) {
+      logger.error('Telegram send failed', err);
+      showToast(`Telegram failed: ${err.message}`, "error");
+    } finally {
+      if (isMounted.current) setIsSendingTelegram(false);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col bg-slate-900 overflow-hidden relative">
       {toast && (
@@ -348,24 +370,6 @@ const DispatchDetailScreen: React.FC<Props> = ({
             <h3 className="text-xl font-bold uppercase tracking-widest mb-8 text-center">Batch Finalize Actions</h3>
             <div className="space-y-4">
               <button 
-                disabled={isUploading}
-                onClick={handleUploadToSheet} 
-                className={`btn btn-lg btn-block text-white border-none flex justify-start gap-4 h-20 rounded-2xl px-6 transition-all ${dispatch.sheets_synced ? 'bg-emerald-700' : 'bg-blue-600 hover:bg-blue-500'} disabled:bg-slate-700`}
-              >
-                <div className="bg-white/20 p-2 rounded-xl shadow-inner">
-                  {isUploading ? <span className="loading loading-spinner loading-xs"></span> : (dispatch.sheets_synced ? '✅' : <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0l-4 4m4-4v12" /></svg>)}
-                </div>
-                <div className="text-left">
-                  <p className="font-bold text-sm uppercase tracking-tight">
-                    {isUploading ? 'Uploading...' : (dispatch.sheets_synced ? 'Sync Complete' : 'Upload to Spreadsheet')}
-                  </p>
-                  <p className="text-[9px] opacity-60 font-bold uppercase tracking-widest">
-                    {dispatch.sheets_synced ? 'Last sync: ' + new Date(dispatch.sheets_synced_at!).toLocaleTimeString() : 'Sync data to master sheet'}
-                  </p>
-                </div>
-              </button>
-
-              <button 
                 onClick={() => { setShowFinalizeOptions(false); handleDownload(); }} 
                 className="btn btn-lg btn-block text-white border-none flex justify-start gap-4 h-20 rounded-2xl px-6 bg-emerald-600 hover:bg-emerald-700"
               >
@@ -373,6 +377,20 @@ const DispatchDetailScreen: React.FC<Props> = ({
                 <div className="text-left">
                   <p className="font-bold text-sm uppercase tracking-tight">Download Packing Slip</p>
                   <p className="text-[9px] opacity-60 font-bold uppercase tracking-widest">Excel Export (A4 Ready)</p>
+                </div>
+              </button>
+
+              <button 
+                disabled={isSendingTelegram}
+                onClick={handleSendTelegram} 
+                className="btn btn-lg btn-block text-white border-none flex justify-start gap-4 h-20 rounded-2xl px-6 bg-blue-500 hover:bg-blue-600 disabled:bg-slate-700"
+              >
+                <div className="bg-white/20 p-2 rounded-xl shadow-inner">
+                  {isSendingTelegram ? <span className="loading loading-spinner loading-xs"></span> : <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>}
+                </div>
+                <div className="text-left">
+                  <p className="font-bold text-sm uppercase tracking-tight">Send to Telegram</p>
+                  <p className="text-[9px] opacity-60 font-bold uppercase tracking-widest">Share to Group Chat</p>
                 </div>
               </button>
 

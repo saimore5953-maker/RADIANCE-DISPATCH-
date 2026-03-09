@@ -9,13 +9,13 @@ import HistoryScreen from './components/HistoryScreen';
 import DispatchDetailScreen from './components/DispatchDetailScreen';
 import CustomerSelectionScreen from './components/CustomerSelectionScreen';
 import LogisticsDetailsScreen from './components/LogisticsDetailsScreen';
-import SettingsScreen from './components/SettingsScreen';
+import AdminWindow from './components/AdminWindow';
 import { logger } from './services/logger';
 import { generateUUID } from './services/utils';
 
 const App: React.FC = () => {
   const [auth, setAuth] = useState<AuthState>({ operatorId: null, isLoggedIn: false });
-  const [currentView, setCurrentView] = useState<'LOGIN' | 'HOME' | 'SCAN' | 'HISTORY' | 'DETAIL' | 'SUMMARY' | 'CUSTOMER_SELECT' | 'LOGISTICS_DETAILS' | 'SETTINGS'>('LOGIN');
+  const [currentView, setCurrentView] = useState<'LOGIN' | 'HOME' | 'SCAN' | 'HISTORY' | 'DETAIL' | 'SUMMARY' | 'CUSTOMER_SELECT' | 'LOGISTICS_DETAILS' | 'ADMIN'>('LOGIN');
   const [activeDispatch, setActiveDispatch] = useState<Dispatch | null>(null);
   const [selectedDispatchId, setSelectedDispatchId] = useState<string | null>(null);
   const [isDbReady, setIsDbReady] = useState(false);
@@ -36,6 +36,10 @@ const App: React.FC = () => {
   const handleLogin = (id: string) => {
     setAuth({ operatorId: id, isLoggedIn: true });
     setCurrentView('HOME');
+  };
+
+  const handleAdminLogin = () => {
+    setCurrentView('ADMIN');
   };
 
   const handleLogout = () => {
@@ -126,17 +130,16 @@ const App: React.FC = () => {
 
   return (
     <div className="max-w-md mx-auto min-h-screen w-full flex flex-col relative bg-transparent">
-      {currentView === 'LOGIN' && <LoginScreen onLogin={handleLogin} />}
+      {currentView === 'LOGIN' && <LoginScreen onLogin={handleLogin} onAdminLogin={handleAdminLogin} />}
       {currentView === 'HOME' && (
         <HomeScreen 
           operatorId={auth.operatorId!} 
           onStart={initiateNewDispatch} 
           onHistory={() => setCurrentView('HISTORY')}
           onLogout={handleLogout}
-          onOpenSettings={() => setCurrentView('SETTINGS')}
         />
       )}
-      {currentView === 'SETTINGS' && <SettingsScreen onBack={() => setCurrentView('HOME')} />}
+      {currentView === 'ADMIN' && <AdminWindow onBack={() => setCurrentView('LOGIN')} />}
       {currentView === 'CUSTOMER_SELECT' && <CustomerSelectionScreen onSelect={handleCustomerSelected} onBack={() => setCurrentView('HOME')} />}
       {currentView === 'LOGISTICS_DETAILS' && <LogisticsDetailsScreen onComplete={finalizeCreateDispatch} onBack={() => setCurrentView('CUSTOMER_SELECT')} />}
       {currentView === 'SCAN' && activeDispatch && <ScanScreen dispatch={activeDispatch} onBack={() => setCurrentView('HOME')} onComplete={(id) => { setSelectedDispatchId(id); setCurrentView('DETAIL'); }} />}

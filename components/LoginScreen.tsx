@@ -1,26 +1,26 @@
 
 import React, { useState } from 'react';
+import { adminService } from '../services/adminService';
 
 interface Props {
   onLogin: (name: string) => void;
+  onAdminLogin: () => void;
 }
 
-const PIN_MAP: Record<string, string> = {
-  '0001': 'Prajval Kulkarni',
-  '0002': 'Ravi Tiwari',
-  '0003': 'Sai More',
-};
-
-const LoginScreen: React.FC<Props> = ({ onLogin }) => {
+const LoginScreen: React.FC<Props> = ({ onLogin, onAdminLogin }) => {
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const operatorName = PIN_MAP[pin];
-    if (operatorName) {
+    const result = adminService.validateLogin(pin);
+    
+    if (result === 'ADMIN') {
       setError(null);
-      onLogin(operatorName);
+      onAdminLogin();
+    } else if (result) {
+      setError(null);
+      onLogin(result.name);
     } else {
       setError('ACCESS DENIED');
     }

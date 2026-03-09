@@ -7,10 +7,9 @@ interface Props {
   onStart: () => void;
   onHistory: () => void;
   onLogout: () => void;
-  onOpenSettings: () => void;
 }
 
-const HomeScreen: React.FC<Props> = ({ operatorId, onStart, onHistory, onLogout, onOpenSettings }) => {
+const HomeScreen: React.FC<Props> = ({ operatorId, onStart, onHistory, onLogout }) => {
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-900">
       {/* Top Bar */}
@@ -19,7 +18,7 @@ const HomeScreen: React.FC<Props> = ({ operatorId, onStart, onHistory, onLogout,
           <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Active Operator</span>
           <h2 className="text-sm font-bold text-white uppercase">{operatorId}</h2>
         </div>
-        <TopRightMenu onOpenSettings={onOpenSettings} onLogout={onLogout} />
+        <TopRightMenu onLogout={onLogout} />
       </div>
 
       <div className="p-6 flex flex-col gap-4 flex-1 overflow-y-auto">
