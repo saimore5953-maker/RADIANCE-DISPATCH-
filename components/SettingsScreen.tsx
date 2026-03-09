@@ -209,6 +209,16 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
                   placeholder="Enter Chat ID (e.g. -100...)"
                 />
               </div>
+              <div>
+                <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1 ml-1">Bot Webhook URL (Vercel)</label>
+                <input 
+                  type="text"
+                  value={settings.telegramBotWebhookUrl}
+                  onChange={(e) => updateSetting('telegramBotWebhookUrl', e.target.value)}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-xs font-mono text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                  placeholder="https://your-bot.vercel.app"
+                />
+              </div>
               <p className="text-[9px] text-slate-500 italic px-1 leading-relaxed">Ensure the bot is an admin in your group to send documents.</p>
             </div>
           </div>
