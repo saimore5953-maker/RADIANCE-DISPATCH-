@@ -34,8 +34,15 @@ export const telegramService = {
     if (telegramBotWebhookUrl && telegramBotWebhookUrl.trim() !== '') {
       try {
         let targetUrl = telegramBotWebhookUrl.trim();
-        // If the user provided the base URL, append /api/webhook
-        if (!targetUrl.includes('/api/webhook')) {
+        
+        // If the URL matches the current origin, use a relative path to avoid CORS/Network issues
+        const currentOrigin = window.location.origin;
+        if (targetUrl.startsWith(currentOrigin)) {
+          targetUrl = '/api/webhook';
+        } else if (!targetUrl.startsWith('http') && !targetUrl.startsWith('/')) {
+          // If it's just a path or a partial domain, try to make it relative
+          targetUrl = '/api/webhook';
+        } else if (!targetUrl.includes('/api/webhook') && targetUrl.startsWith('http')) {
           targetUrl = targetUrl.replace(/\/$/, '') + '/api/webhook';
         }
 
@@ -46,7 +53,8 @@ export const telegramService = {
         const res = await fetch(targetUrl, {
           method: 'POST',
           body: formData,
-          mode: 'cors'
+          // Remove mode: 'cors' if it's a relative request to avoid issues
+          ...(targetUrl.startsWith('/') ? {} : { mode: 'cors' })
         });
 
         if (!res.ok) {
@@ -63,6 +71,11 @@ export const telegramService = {
         return true;
       } catch (error: any) {
         console.error('Webhook Error:', error);
+        // If webhook fails with a network error, we can optionally fall back to direct mode
+        // but for now, let's just give a better error message
+        if (error.message === 'Failed to fetch') {
+          throw new Error(`Webhook Connection Failed: The browser could not reach the server. Please check if the Webhook URL is correct or try leaving it empty to use Direct Mode.`);
+        }
         throw new Error(`Webhook Failed: ${error.message}`);
       }
     }

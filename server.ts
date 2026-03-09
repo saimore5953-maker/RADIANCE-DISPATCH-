@@ -42,7 +42,9 @@ app.post('/api/webhook', upload.single('excel'), async (req, res) => {
       if (excelFile) {
         const formData = new FormData();
         formData.append('chat_id', chat_id);
-        formData.append('document', new Blob([excelFile.buffer]), excelFile.originalname || "dispatch.xlsx");
+        // Use a proper Blob with a filename for Telegram
+        const fileBlob = new Blob([excelFile.buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        formData.append('document', fileBlob, excelFile.originalname || "dispatch.xlsx");
         formData.append('caption', messageText);
         formData.append('parse_mode', 'Markdown');
         formData.append('reply_markup', JSON.stringify(keyboard));
@@ -52,7 +54,7 @@ app.post('/api/webhook', upload.single('excel'), async (req, res) => {
           body: formData
         });
         const tgData: any = await tgRes.json();
-        if (!tgData.ok) throw new Error(tgData.description);
+        if (!tgData.ok) throw new Error(tgData.description || 'Telegram API Error');
       } else {
         const tgRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
           method: 'POST',
@@ -65,7 +67,7 @@ app.post('/api/webhook', upload.single('excel'), async (req, res) => {
           })
         });
         const tgData: any = await tgRes.json();
-        if (!tgData.ok) throw new Error(tgData.description);
+        if (!tgData.ok) throw new Error(tgData.description || 'Telegram API Error');
       }
       return res.json({ ok: true });
     }
