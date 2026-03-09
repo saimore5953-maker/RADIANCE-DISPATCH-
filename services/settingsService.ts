@@ -13,7 +13,6 @@ export interface AppSettings {
   customApiKey: string;
   telegramBotToken: string;
   telegramChatId: string;
-  telegramBotWebhookUrl: string;
 }
 
 const SETTINGS_KEY = 'radiance_dispatch_settings';
@@ -30,7 +29,6 @@ const defaultSettings: AppSettings = {
   customApiKey: '',
   telegramBotToken: '',
   telegramChatId: '',
-  telegramBotWebhookUrl: '',
 };
 
 export const settingsService = {
