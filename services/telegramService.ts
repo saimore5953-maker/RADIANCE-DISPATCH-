@@ -27,15 +27,20 @@ export const telegramService = {
     // Generate Excel for attachment
     const { excel } = await generateExports(dispatch, scans, summary);
 
-    // 1. Automation Mode (Vercel Webhook)
+    // 1. Automation Mode (Vercel Webhook / Local Server)
     if (telegramBotWebhookUrl && telegramBotWebhookUrl.trim() !== '') {
       try {
-        const baseUrl = telegramBotWebhookUrl.replace(/\/$/, '');
+        let targetUrl = telegramBotWebhookUrl.trim();
+        // If the user provided the base URL, append /api/webhook
+        if (!targetUrl.includes('/api/webhook')) {
+          targetUrl = targetUrl.replace(/\/$/, '') + '/api/webhook';
+        }
+
         const formData = new FormData();
         formData.append('data', JSON.stringify(payload));
         formData.append('excel', excel.blob, excel.fileName);
 
-        const res = await fetch(`${baseUrl}/api/dispatch`, {
+        const res = await fetch(targetUrl, {
           method: 'POST',
           body: formData,
           mode: 'cors'
