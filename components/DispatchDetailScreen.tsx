@@ -31,6 +31,7 @@ const DispatchDetailScreen: React.FC<Props> = ({
   const [showFinalizeOptions, setShowFinalizeOptions] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isSendingTelegram, setIsSendingTelegram] = useState(false);
+  const [isTelegramSent, setIsTelegramSent] = useState(false);
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
   const isMounted = useRef(true);
 
@@ -205,6 +206,7 @@ const DispatchDetailScreen: React.FC<Props> = ({
         scans,
         settings
       );
+      if (isMounted.current) setIsTelegramSent(true);
       showToast("Sent to Telegram!", "success");
     } catch (err: any) {
       logger.error('Telegram send failed', err);
@@ -381,16 +383,16 @@ const DispatchDetailScreen: React.FC<Props> = ({
               </button>
 
               <button 
-                disabled={isSendingTelegram}
+                disabled={isSendingTelegram || isTelegramSent}
                 onClick={handleSendTelegram} 
-                className="btn btn-lg btn-block text-white border-none flex justify-start gap-4 h-20 rounded-2xl px-6 bg-blue-500 hover:bg-blue-600 disabled:bg-slate-700"
+                className={`btn btn-lg btn-block text-white border-none flex justify-start gap-4 h-20 rounded-2xl px-6 transition-all ${isTelegramSent ? 'bg-emerald-700' : 'bg-blue-500 hover:bg-blue-600'} disabled:bg-slate-700`}
               >
                 <div className="bg-white/20 p-2 rounded-xl shadow-inner">
-                  {isSendingTelegram ? <span className="loading loading-spinner loading-xs"></span> : <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>}
+                  {isSendingTelegram ? <span className="loading loading-spinner loading-xs"></span> : (isTelegramSent ? '✅' : <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>)}
                 </div>
                 <div className="text-left">
-                  <p className="font-bold text-sm uppercase tracking-tight">Send to Telegram</p>
-                  <p className="text-[9px] opacity-60 font-bold uppercase tracking-widest">Share to Group Chat</p>
+                  <p className="font-bold text-sm uppercase tracking-tight">{isTelegramSent ? 'Sent' : 'Send to Telegram'}</p>
+                  <p className="text-[9px] opacity-60 font-bold uppercase tracking-widest">{isTelegramSent ? 'Message shared successfully' : 'Share to Group Chat'}</p>
                 </div>
               </button>
 
