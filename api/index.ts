@@ -140,6 +140,7 @@ app.post('/api/webhook', upload.single('excel'), async (req, res) => {
 
       if (query.data.startsWith('finalize_')) {
         const dispatchId = query.data.replace('finalize_', '');
+        const originalMsgId = query.message.message_id;
         
         await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
           method: 'POST',
@@ -152,8 +153,9 @@ app.post('/api/webhook', upload.single('excel'), async (req, res) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_id: query.message.chat.id,
-            text: `📝 Please enter <b>Invoice Number</b> for Dispatch ID: <code>${dispatchId}</code>`,
+            text: `📝 Please enter <b>Invoice Number</b> for Dispatch ID: <code>${dispatchId}</code>\n\n(Reply to this message with the number)`,
             parse_mode: 'HTML',
+            reply_to_message_id: originalMsgId,
             reply_markup: { force_reply: true, selective: true }
           })
         });
@@ -164,15 +166,24 @@ app.post('/api/webhook', upload.single('excel'), async (req, res) => {
     // Handle Invoice Number Reply
     if (update.message && update.message.reply_to_message) {
       const replyTo = update.message.reply_to_message;
-      if (replyTo.text && replyTo.text.includes("Please enter Invoice Number")) {
+      const isPrompt = replyTo.text && replyTo.text.includes("Please enter Invoice Number");
+      
+      if (isPrompt) {
         const invoiceNo = update.message.text.trim();
         const idMatch = replyTo.text.match(/Dispatch ID: ([\w-]+)/);
         const dispatchId = idMatch ? idMatch[1] : null;
 
-        if (!dispatchId || !token) return res.send("ok");
+        if (!dispatchId || !token) {
+          addLog("Missing Dispatch ID or Token in reply handler");
+          return res.send("ok");
+        }
 
+        // The prompt was a reply to the original message
         const originalMsg = replyTo.reply_to_message;
-        if (!originalMsg) return res.send("ok");
+        if (!originalMsg) {
+          addLog("Could not find original message to edit");
+          // We can still try to send to GAS even if we can't edit the TG message
+        }
 
         if (!gas_url) {
           await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -183,34 +194,48 @@ app.post('/api/webhook', upload.single('excel'), async (req, res) => {
           return res.send("ok");
         }
 
-        const gasRes = await fetch(gas_url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dispatch_id: dispatchId, invoice_no: invoiceNo, action: 'finalize' })
-        });
-        const gasData: any = await gasRes.json();
-
-        if (gasData.ok) {
-          const newText = `✅ <b>Dispatch Finalized</b>\n\n` +
-                          `📦 <b>Main Sheet No:</b> <code>${gasData.dispatch_no}</code>\n` +
-                          `🚚 <b>ID:</b> <code>${dispatchId}</code>\n` +
-                          `📄 <b>Invoice:</b> <code>${invoiceNo}</code>`;
-          
-          const editMethod = originalMsg.caption ? 'editMessageCaption' : 'editMessageText';
-          const editPayload: any = {
-            chat_id: update.message.chat.id,
-            message_id: originalMsg.message_id,
-            parse_mode: 'HTML',
-            reply_markup: null
-          };
-          if (originalMsg.caption) editPayload.caption = newText;
-          else editPayload.text = newText;
-
-          await fetch(`https://api.telegram.org/bot${token}/${editMethod}`, {
+        addLog(`Finalizing ID ${dispatchId} with Invoice ${invoiceNo}...`);
+        try {
+          const gasRes = await fetch(gas_url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(editPayload)
+            body: JSON.stringify({ dispatch_id: dispatchId, invoice_no: invoiceNo, action: 'finalize' })
           });
+          const gasData: any = await gasRes.json();
+          addLog(`GAS Finalize Result: ${JSON.stringify(gasData)}`);
+
+          if (gasData.ok && originalMsg) {
+            const newText = `✅ <b>Dispatch Finalized</b>\n\n` +
+                            `📦 <b>Main Sheet No:</b> <code>${gasData.dispatch_no || 'N/A'}</code>\n` +
+                            `🚚 <b>ID:</b> <code>${dispatchId}</code>\n` +
+                            `📄 <b>Invoice:</b> <code>${invoiceNo}</code>`;
+            
+            const editMethod = originalMsg.caption ? 'editMessageCaption' : 'editMessageText';
+            const editPayload: any = {
+              chat_id: update.message.chat.id,
+              message_id: originalMsg.message_id,
+              parse_mode: 'HTML',
+              reply_markup: null
+            };
+            if (originalMsg.caption) editPayload.caption = newText;
+            else editPayload.text = newText;
+
+            await fetch(`https://api.telegram.org/bot${token}/${editMethod}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(editPayload)
+            });
+            
+            addLog("Telegram Message Updated Successfully");
+          } else if (!gasData.ok) {
+            await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chat_id: update.message.chat.id, text: `❌ GAS Error: ${gasData.message || 'Unknown error'}` })
+            });
+          }
+        } catch (e: any) {
+          addLog(`GAS Finalize Error: ${e.message}`);
         }
       }
     }
