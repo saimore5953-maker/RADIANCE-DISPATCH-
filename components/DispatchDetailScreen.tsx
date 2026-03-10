@@ -67,20 +67,22 @@ const DispatchDetailScreen: React.FC<Props> = ({
 
   if (!dispatch) return null;
 
-  const summaries: Record<string, ExtendedPartSummary> = scans.reduce((acc, scan) => {
-    if (!acc[scan.part_no]) {
-      acc[scan.part_no] = { 
+  const summaries: Record<string, ExtendedPartSummary & { per_box_qty: number }> = scans.reduce((acc, scan) => {
+    const key = `${scan.part_no}_${scan.qty_nos}`;
+    if (!acc[key]) {
+      acc[key] = { 
         part_no: scan.part_no, 
         part_name: scan.part_name, 
+        per_box_qty: scan.qty_nos,
         boxes: 0, 
         total_qty: 0,
         is_manual: scan.ocr_text_raw === "MANUAL ENTRY"
       };
     }
-    acc[scan.part_no].boxes += 1;
-    acc[scan.part_no].total_qty += scan.qty_nos;
+    acc[key].boxes += 1;
+    acc[key].total_qty += scan.qty_nos;
     return acc;
-  }, {} as Record<string, ExtendedPartSummary>);
+  }, {} as Record<string, ExtendedPartSummary & { per_box_qty: number }>);
 
   const summaryList = Object.values(summaries);
   const realScans = scans.filter(s => s.ocr_text_raw !== "MANUAL ENTRY");
@@ -145,6 +147,7 @@ const DispatchDetailScreen: React.FC<Props> = ({
       summary: summaryList.map(s => ({
         part_no: s.part_no,
         part_name: s.part_name,
+        per_box_qty: s.per_box_qty,
         boxes: s.boxes,
         total_qty: s.total_qty
       }))
@@ -263,11 +266,12 @@ const DispatchDetailScreen: React.FC<Props> = ({
              {summaryList.length === 0 ? (
                <div className="py-20 text-center opacity-30 uppercase font-bold text-xs tracking-widest">Waiting for data...</div>
              ) : (
-               summaryList.map(s => (
-                <div key={s.part_no} className="bg-slate-800 sober-border p-4 rounded-xl flex justify-between items-center shadow-sm border border-white/5">
+               summaryList.map((s, idx) => (
+                <div key={`${s.part_no}_${idx}`} className="bg-slate-800 sober-border p-4 rounded-xl flex justify-between items-center shadow-sm border border-white/5">
                     <div>
                       <h3 className="font-mono font-bold text-blue-400 text-sm">{s.part_no}</h3>
                       <p className="text-[10px] text-slate-400 font-bold uppercase">{s.part_name}</p>
+                      <p className="text-[8px] text-slate-500 font-bold uppercase mt-1">QTY/BOX: {s.per_box_qty}</p>
                     </div>
                     <div className="text-right">
                       <div className="text-lg font-mono font-bold text-white">{s.total_qty}</div>
@@ -326,15 +330,17 @@ const DispatchDetailScreen: React.FC<Props> = ({
              {summaryList.length > 0 && (
                <div className="space-y-3">
                   <h3 className="text-[10px] font-bold text-red-500 uppercase tracking-widest ml-1 border-b border-white/5 pb-2">Modify Records</h3>
-                  {summaryList.map(s => (
-                    <div key={s.part_no} className="bg-slate-800/60 p-4 rounded-xl sober-border flex justify-between items-center border border-white/5">
+                  {summaryList.map((s, idx) => (
+                    <div key={`${s.part_no}_${idx}`} className="bg-slate-800/60 p-4 rounded-xl sober-border flex justify-between items-center border border-white/5">
                         <div>
                           <p className="font-mono font-bold text-white text-xs">{s.part_no}</p>
-                          <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Stored: {s.boxes} Boxes</p>
+                          <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">
+                            {s.boxes} Boxes @ {s.per_box_qty}
+                          </p>
                         </div>
                         <div className="flex gap-2">
-                          <button onClick={() => dbService.removeOneScan(dispatch.dispatch_id, s.part_no).then(load)} className="btn btn-sm btn-outline btn-error border-2 font-bold uppercase text-[9px] px-3 h-10">Remove 1</button>
-                          <button onClick={() => dbService.removeAllScansForPart(dispatch.dispatch_id, s.part_no).then(load)} className="btn btn-sm btn-error font-bold uppercase text-[9px] px-3 h-10">Remove All</button>
+                          <button onClick={() => dbService.removeOneScan(dispatch.dispatch_id, s.part_no, s.per_box_qty).then(load)} className="btn btn-sm btn-outline btn-error border-2 font-bold uppercase text-[9px] px-3 h-10">Remove 1</button>
+                          <button onClick={() => dbService.removeAllScansForPart(dispatch.dispatch_id, s.part_no, s.per_box_qty).then(load)} className="btn btn-sm btn-error font-bold uppercase text-[9px] px-3 h-10">Remove All</button>
                         </div>
                     </div>
                   ))}

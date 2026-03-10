@@ -129,9 +129,9 @@ class DispatchDatabase {
     await this.updateDispatch(dispatch);
   }
 
-  async removeOneScan(dispatchId: string, partNo: string): Promise<void> {
+  async removeOneScan(dispatchId: string, partNo: string, qtyPerBox: number): Promise<void> {
     const scans = await this.getScansForDispatch(dispatchId);
-    const partScans = scans.filter(s => s.part_no === partNo);
+    const partScans = scans.filter(s => s.part_no === partNo && s.qty_nos === qtyPerBox);
     if (partScans.length === 0) return;
     
     const latest = partScans.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
@@ -146,9 +146,9 @@ class DispatchDatabase {
     await this.recalculateDispatchTotals(dispatchId);
   }
 
-  async removeAllScansForPart(dispatchId: string, partNo: string): Promise<void> {
+  async removeAllScansForPart(dispatchId: string, partNo: string, qtyPerBox: number): Promise<void> {
     const scans = await this.getScansForDispatch(dispatchId);
-    const partScans = scans.filter(s => s.part_no === partNo);
+    const partScans = scans.filter(s => s.part_no === partNo && s.qty_nos === qtyPerBox);
     if (partScans.length === 0) return;
     
     const store = this.getStore('scans', 'readwrite');

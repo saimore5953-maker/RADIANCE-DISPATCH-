@@ -29,9 +29,9 @@ export async function generateExports(dispatch: Dispatch, scans: ScanRecord[], s
     { width: 8 },   // A: Sr no.
     { width: 16 },  // B: PART NO
     { width: 32 },  // C: PART NAME
-    { width: 15 },  // D: BOX DISP QTY
-    { width: 15 },  // E: TOTAL QTY
-    { width: 18 }   // F: DISP. EXE. SIGN.
+    { width: 15 },  // D: PER BOX QTY
+    { width: 15 },  // E: BOX DISP QTY
+    { width: 15 }   // F: TOTAL QTY
   ];
 
   const borderThin: Partial<ExcelJS.Borders> = {
@@ -101,7 +101,7 @@ export async function generateExports(dispatch: Dispatch, scans: ScanRecord[], s
   sheet.addRow([]); // Blank spacer row
 
   // --- TABLE HEADER ---
-  const tblHeader = sheet.addRow(['Sr no.', 'PART NO', 'PART NAME', 'BOX DISP QTY', 'TOTAL QTY', 'DISP. EXE. SIGN.']);
+  const tblHeader = sheet.addRow(['Sr no.', 'PART NO', 'PART NAME', 'PER BOX QTY', 'BOX DISP QTY', 'TOTAL QTY']);
   tblHeader.height = 24;
   tblHeader.eachCell((cell) => {
     cell.font = { size: 8, bold: true };
@@ -110,8 +110,39 @@ export async function generateExports(dispatch: Dispatch, scans: ScanRecord[], s
   });
 
   // --- TABLE CONTENT ---
-  summaries.forEach((s, index) => {
-    const row = sheet.addRow([index + 1, s.part_no, s.part_name, s.boxes, s.total_qty, '']);
+  // Group scans by part_no AND qty_nos as requested
+  interface GroupedSummary {
+    part_no: string;
+    part_name: string;
+    per_box_qty: number;
+    boxes: number;
+    total_qty: number;
+  }
+
+  const groupedMap = new Map<string, GroupedSummary>();
+  scans.forEach(scan => {
+    // Only count accepted/corrected scans
+    if (scan.status === 'REJECTED') return;
+    
+    const key = `${scan.part_no}_${scan.qty_nos}`;
+    if (groupedMap.has(key)) {
+      const existing = groupedMap.get(key)!;
+      existing.boxes += 1;
+      existing.total_qty += scan.qty_nos;
+    } else {
+      groupedMap.set(key, {
+        part_no: scan.part_no,
+        part_name: scan.part_name,
+        per_box_qty: scan.qty_nos,
+        boxes: 1,
+        total_qty: scan.qty_nos
+      });
+    }
+  });
+  const groupedSummaries = Array.from(groupedMap.values());
+
+  groupedSummaries.forEach((s, index) => {
+    const row = sheet.addRow([index + 1, s.part_no, s.part_name, s.per_box_qty, s.boxes, s.total_qty]);
     row.height = 24;
     row.eachCell((cell, colNum) => {
       cell.border = borderThin;
@@ -122,7 +153,7 @@ export async function generateExports(dispatch: Dispatch, scans: ScanRecord[], s
 
   // Maintain form length with empty rows (as per visual sample)
   const minRows = 16;
-  const currentRows = summaries.length;
+  const currentRows = groupedSummaries.length;
   if (currentRows < minRows) {
     for (let i = 0; i < (minRows - currentRows); i++) {
         const emptyRow = sheet.addRow(['', '', '', '', '', '']);
@@ -132,10 +163,10 @@ export async function generateExports(dispatch: Dispatch, scans: ScanRecord[], s
   }
 
   // --- TOTALS ROW ---
-  const totalBoxes = summaries.reduce((acc, s) => acc + s.boxes, 0);
-  const totalQty = summaries.reduce((acc, s) => acc + s.total_qty, 0);
-  const footerRow = sheet.addRow(['', '', 'TOTAL', totalBoxes, totalQty, '']);
-  sheet.mergeCells(`A${footerRow.number}:B${footerRow.number}`);
+  const totalBoxes = groupedSummaries.reduce((acc, s) => acc + s.boxes, 0);
+  const totalQty = groupedSummaries.reduce((acc, s) => acc + s.total_qty, 0);
+  const footerRow = sheet.addRow(['', '', 'TOTAL', '', totalBoxes, totalQty]);
+  sheet.mergeCells(`A${footerRow.number}:C${footerRow.number}`);
   footerRow.height = 28;
   footerRow.eachCell((cell) => {
     cell.font = { size: 10, bold: true };

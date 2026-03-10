@@ -13,6 +13,33 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
   const [isSaved, setIsSaved] = useState(true);
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('Saved');
+  const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
+  const [showLogs, setShowLogs] = useState(false);
+  const [logs, setLogs] = useState<string[]>([]);
+
+  const fetchLogs = async () => {
+    try {
+      const res = await fetch('/api/webhook');
+      const data = await res.json();
+      setLogs(data.logs || []);
+      setShowLogs(true);
+    } catch (e) {
+      triggerToast("Could not fetch logs");
+    }
+  };
+
+  useEffect(() => {
+    const checkServer = async () => {
+      try {
+        const res = await fetch('/api/webhook');
+        if (res.ok) setServerStatus('online');
+        else setServerStatus('offline');
+      } catch (e) {
+        setServerStatus('offline');
+      }
+    };
+    checkServer();
+  }, []);
 
   const updateSetting = (key: keyof AppSettings, value: any) => {
     const newSettings = { ...settings, [key]: value };
@@ -178,14 +205,25 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
         <div>
           <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-3 ml-1">Telegram Integration</h3>
           <div className="bg-slate-800 rounded-2xl border border-white/5 overflow-hidden shadow-sm p-4 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-blue-900/30 text-blue-400 p-2 rounded-xl">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="bg-blue-900/30 text-blue-400 p-2 rounded-xl">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-white">Telegram Bot</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-[10px] text-slate-500">Send dispatch reports to group</p>
+                    <div className={`w-1.5 h-1.5 rounded-full ${serverStatus === 'online' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : serverStatus === 'offline' ? 'bg-red-500' : 'bg-slate-500 animate-pulse'}`}></div>
+                  </div>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-bold text-white">Telegram Bot</p>
-                <p className="text-[10px] text-slate-500">Send dispatch reports to group</p>
-              </div>
+              <button 
+                onClick={fetchLogs}
+                className="text-[9px] font-black text-slate-500 uppercase tracking-widest hover:text-slate-300 transition-colors"
+              >
+                View Logs
+              </button>
             </div>
 
             <div className="space-y-3">
@@ -210,15 +248,64 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
                 />
               </div>
               <div>
-                <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1 ml-1">Bot Webhook URL (Vercel)</label>
-                <input 
-                  type="text"
-                  value={settings.telegramBotWebhookUrl}
-                  onChange={(e) => updateSetting('telegramBotWebhookUrl', e.target.value)}
-                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-xs font-mono text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                  placeholder="https://your-bot.vercel.app"
-                />
+                <div className="flex items-center justify-between mb-1 ml-1">
+                  <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Bot Webhook URL</label>
+                  <button 
+                    onClick={() => updateSetting('telegramBotWebhookUrl', '/api/webhook')}
+                    className="text-[9px] font-black text-blue-400 uppercase tracking-widest hover:text-blue-300 transition-colors"
+                  >
+                    Use Built-in Bot
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <input 
+                    type="text"
+                    value={settings.telegramBotWebhookUrl}
+                    onChange={(e) => updateSetting('telegramBotWebhookUrl', e.target.value)}
+                    className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-xs font-mono text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                    placeholder="https://your-bot.vercel.app"
+                  />
+                  <button 
+                    onClick={async () => {
+                      try {
+                        const url = settings.telegramBotWebhookUrl.trim() || '/api/webhook';
+                        const testUrl = url.includes('http') ? url : window.location.origin + (url.startsWith('/') ? url : '/' + url);
+                        const res = await fetch(testUrl);
+                        if (res.ok) triggerToast("Connection OK");
+                        else triggerToast("Server Error: " + res.status);
+                      } catch (e) {
+                        triggerToast("Connection Failed");
+                      }
+                    }}
+                    className="px-3 bg-slate-700 text-slate-300 rounded-xl hover:bg-slate-600 transition-colors"
+                    title="Test Connection"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                  </button>
+                </div>
               </div>
+
+              <button 
+                onClick={async () => {
+                  if (!settings.telegramBotToken) {
+                    alert("Please enter Bot Token first");
+                    return;
+                  }
+                  try {
+                    const webhookUrl = window.location.origin + '/api/webhook';
+                    const res = await fetch(`https://api.telegram.org/bot${settings.telegramBotToken}/setWebhook?url=${webhookUrl}`);
+                    const data = await res.json();
+                    if (data.ok) alert("✅ Webhook Registered Successfully! Buttons will now work.");
+                    else alert("❌ Failed: " + data.description);
+                  } catch (e) {
+                    alert("❌ Error: " + e.message);
+                  }
+                }}
+                className="w-full py-3 bg-blue-600/20 text-blue-400 border border-blue-500/30 font-bold rounded-xl text-[10px] uppercase tracking-widest hover:bg-blue-600/30 transition-all"
+              >
+                Register Webhook with Telegram
+              </button>
+
               <p className="text-[9px] text-slate-500 italic px-1 leading-relaxed">Ensure the bot is an admin in your group to send documents.</p>
             </div>
           </div>
@@ -328,6 +415,32 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
           <div className="bg-blue-600 text-white px-6 py-2 rounded-full text-xs font-bold uppercase tracking-widest shadow-2xl">
             {toastMsg}
           </div>
+        </div>
+      )}
+
+      {showLogs && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-[100] flex flex-col p-6 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-sm font-black text-white uppercase tracking-widest">Server Debug Logs</h2>
+            <button onClick={() => setShowLogs(false)} className="text-slate-400 hover:text-white">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+          <div className="flex-1 bg-black rounded-2xl border border-white/10 p-4 font-mono text-[10px] overflow-y-auto space-y-1">
+            {logs.length === 0 ? (
+              <p className="text-slate-600 italic">No logs recorded yet...</p>
+            ) : (
+              logs.map((log, i) => (
+                <p key={i} className="text-emerald-500/80 break-all">{log}</p>
+              ))
+            )}
+          </div>
+          <button 
+            onClick={fetchLogs}
+            className="mt-4 w-full py-4 bg-slate-800 text-white font-bold rounded-2xl text-[10px] uppercase tracking-widest active:scale-95 transition-all"
+          >
+            Refresh Logs
+          </button>
         </div>
       )}
     </div>

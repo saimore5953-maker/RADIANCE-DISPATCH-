@@ -60,6 +60,7 @@ export interface ScanRecord {
 export interface PartSummary {
   part_no: string;
   part_name: string;
+  per_box_qty: number;
   boxes: number;
   total_qty: number;
 }
