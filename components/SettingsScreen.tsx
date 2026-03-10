@@ -1,12 +1,17 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { settingsService, AppSettings } from '../services/settingsService';
 
 interface Props {
   onBack: () => void;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
-const SettingsScreen: React.FC<Props> = ({ onBack }) => {
+export interface SettingsScreenHandle {
+  save: () => void;
+}
+
+const SettingsScreen = forwardRef<SettingsScreenHandle, Props>(({ onBack, onDirtyChange }, ref) => {
   const [settings, setSettings] = useState<AppSettings>(settingsService.getSettings());
   const [showApiKey, setShowApiKey] = useState(false);
   const [localApiKey, setLocalApiKey] = useState(settings.customApiKey);
@@ -17,12 +22,43 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
   const [showLogs, setShowLogs] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+
+  useImperativeHandle(ref, () => ({
+    save: () => {
+      settingsService.saveSettings(settings);
+      setIsDirty(false);
+      if (onDirtyChange) onDirtyChange(false);
+      triggerToast("Settings Saved Successfully");
+    }
+  }));
 
   const syncFromServer = async () => {
     setIsSyncing(true);
     try {
-      const res = await fetch('/api/get-settings');
-      if (!res.ok) throw new Error("Failed to fetch");
+      const syncUrl = settings.settingsSyncUrl.trim();
+      
+      // Validation for common mistake: entering the Sheet URL instead of the Web App URL
+      if (syncUrl.includes('docs.google.com/spreadsheets') && !syncUrl.includes('/exec')) {
+        throw new Error("Invalid URL. You entered the Spreadsheet URL. Please use the 'Web App URL' (ending in /exec) from the 'Deploy' menu in Google Apps Script.");
+      }
+
+      const fetchUrl = syncUrl || '/api/get-settings';
+      
+      const res = await fetch(fetchUrl);
+      if (!res.ok) {
+        if (res.status === 404) throw new Error("Sync URL not found (404). Check the URL.");
+        throw new Error(`Server returned ${res.status}: ${res.statusText}`);
+      }
+
+      const contentType = res.headers.get("content-type");
+      if (contentType && !contentType.includes("application/json")) {
+        const text = await res.text();
+        if (text.includes("<!DOCTYPE") || text.includes("<html")) {
+          throw new Error("The URL returned a webpage (HTML) instead of data (JSON). Ensure you are using the 'Web App URL' from Google Apps Script and that it is published as 'Anyone' has access.");
+        }
+      }
+
       const serverSettings = await res.json();
       
       const newSettings = { 
@@ -33,13 +69,19 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
         telegramChatId: serverSettings.telegramChatId || settings.telegramChatId,
         webhookUrl: serverSettings.webhookUrl || settings.webhookUrl,
         spreadsheetUrl: serverSettings.spreadsheetUrl || settings.spreadsheetUrl,
+        settingsSyncUrl: serverSettings.settingsSyncUrl || settings.settingsSyncUrl,
+        customApiKey: serverSettings.customApiKey || settings.customApiKey,
+        useCustomApiKey: !!serverSettings.customApiKey || settings.useCustomApiKey,
       };
       
       setSettings(newSettings);
-      settingsService.saveSettings(newSettings);
-      triggerToast("Synced from Server");
-    } catch (e) {
-      triggerToast("Sync Failed");
+      if (serverSettings.customApiKey) setLocalApiKey(serverSettings.customApiKey);
+      setIsDirty(true);
+      if (onDirtyChange) onDirtyChange(true);
+      triggerToast("Synced Successfully");
+    } catch (e: any) {
+      console.error("Sync Error:", e);
+      triggerToast("Sync Failed: " + e.message);
     } finally {
       setIsSyncing(false);
     }
@@ -77,8 +119,9 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
   const updateSetting = (key: keyof AppSettings, value: any) => {
     const newSettings = { ...settings, [key]: value };
     setSettings(newSettings);
-    settingsService.saveSettings(newSettings);
-    triggerToast("Setting Updated");
+    setIsDirty(true);
+    if (onDirtyChange) onDirtyChange(true);
+    triggerToast("Change Pending Save");
   };
 
   const handleSaveApiKey = () => {
@@ -88,18 +131,20 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
     }
     const newSettings = { ...settings, customApiKey: localApiKey };
     setSettings(newSettings);
-    settingsService.saveSettings(newSettings);
+    setIsDirty(true);
+    if (onDirtyChange) onDirtyChange(true);
     setIsSaved(true);
-    triggerToast("API Key Saved");
+    triggerToast("API Key Change Pending");
   };
 
   const handleResetApiKey = () => {
     setLocalApiKey('');
     const newSettings = { ...settings, useCustomApiKey: false, customApiKey: '' };
     setSettings(newSettings);
-    settingsService.saveSettings(newSettings);
+    setIsDirty(true);
+    if (onDirtyChange) onDirtyChange(true);
     setIsSaved(true);
-    triggerToast("Reset Successfully");
+    triggerToast("Reset Pending Save");
   };
 
   const triggerToast = (msg: string = "Saved") => {
@@ -111,24 +156,42 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
   return (
     <div className="flex-1 flex flex-col bg-slate-900 overflow-hidden animate-in slide-in-from-right duration-300">
       <div className="flex-1 overflow-y-auto space-y-6 pb-20">
-        {/* Global Sync Section */}
-        <div className="bg-blue-600/10 border border-blue-500/20 rounded-2xl p-4 flex items-center justify-between">
+        {/* Settings Sync Section */}
+        <div className="bg-blue-600/10 border border-blue-500/20 rounded-2xl p-4 space-y-4">
           <div className="flex items-center gap-3">
             <div className="bg-blue-600/20 text-blue-400 p-2 rounded-xl">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
             </div>
             <div>
-              <p className="text-sm font-bold text-white">Cloud Persistence</p>
-              <p className="text-[10px] text-slate-500">Sync settings across all devices</p>
+              <p className="text-sm font-bold text-white">Settings Sync (Google Sheets)</p>
+              <p className="text-[10px] text-slate-500 font-medium">Fetch all credentials from a central URL</p>
             </div>
           </div>
-          <button 
-            onClick={syncFromServer}
-            disabled={isSyncing}
-            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isSyncing ? 'bg-slate-800 text-slate-600 animate-pulse' : 'bg-blue-600 text-white hover:bg-blue-500 active:scale-95'}`}
-          >
-            {isSyncing ? 'Syncing...' : 'Sync Now'}
-          </button>
+          
+          <div className="space-y-3">
+            <div>
+              <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1 ml-1">Settings Sync URL</label>
+              <input 
+                type="text"
+                value={settings.settingsSyncUrl}
+                onChange={(e) => updateSetting('settingsSyncUrl', e.target.value)}
+                className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-xs font-mono text-blue-400 focus:ring-2 focus:ring-blue-500 outline-none"
+                placeholder="Enter GAS Webhook URL for settings"
+              />
+            </div>
+            
+            <button 
+              onClick={syncFromServer}
+              disabled={isSyncing}
+              className={`w-full py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isSyncing ? 'bg-slate-800 text-slate-600 animate-pulse' : 'bg-blue-600 text-white hover:bg-blue-500 active:scale-95 shadow-lg shadow-blue-600/20'}`}
+            >
+              {isSyncing ? 'Syncing...' : 'Sync Settings Now'}
+            </button>
+          </div>
+          
+          <p className="text-[9px] text-slate-500 italic px-1 leading-relaxed">
+            This URL should return JSON with: telegramBotToken, telegramChatId, webhookUrl, and spreadsheetUrl.
+          </p>
         </div>
 
         {/* Section: API Configuration */}
@@ -541,6 +604,6 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
       )}
     </div>
   );
-};
+});
 
 export default SettingsScreen;

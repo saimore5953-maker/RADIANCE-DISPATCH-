@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { adminService, Operator, Customer } from '../services/adminService';
-import SettingsScreen from './SettingsScreen';
+import SettingsScreen, { SettingsScreenHandle } from './SettingsScreen';
 
 interface Props {
   onBack: () => void;
@@ -11,6 +11,9 @@ const AdminWindow: React.FC<Props> = ({ onBack }) => {
   const [activeTab, setActiveTab] = useState<'operators' | 'customers' | 'settings'>('operators');
   const [operators, setOperators] = useState<Operator[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [settingsDirty, setSettingsDirty] = useState(false);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const settingsRef = useRef<SettingsScreenHandle>(null);
   
   // Operator Edit State
   const [editingOperator, setEditingOperator] = useState<Operator | null>(null);
@@ -61,6 +64,22 @@ const AdminWindow: React.FC<Props> = ({ onBack }) => {
     setCustomers(updated);
   };
 
+  const handleLogoutClick = () => {
+    if (settingsDirty) {
+      setShowExitConfirm(true);
+    } else {
+      onBack();
+    }
+  };
+
+  const handleConfirmExit = (save: boolean) => {
+    if (save && settingsRef.current) {
+      settingsRef.current.save();
+    }
+    setShowExitConfirm(false);
+    onBack();
+  };
+
   return (
     <div className="flex-1 flex flex-col bg-slate-900 text-white overflow-hidden animate-in fade-in duration-300">
       {/* Header */}
@@ -70,9 +89,17 @@ const AdminWindow: React.FC<Props> = ({ onBack }) => {
             ADMIN
           </h2>
         </div>
-        <div className="flex-none">
+        <div className="flex-none flex items-center gap-2">
+          {activeTab === 'settings' && (
+            <button 
+              onClick={() => settingsRef.current?.save()}
+              className={`btn btn-ghost text-emerald-400 font-bold uppercase text-[10px] tracking-widest hover:bg-emerald-400/10 ${settingsDirty ? 'animate-pulse bg-emerald-400/5' : ''}`}
+            >
+              SAVE SETTINGS
+            </button>
+          )}
           <button 
-            onClick={onBack}
+            onClick={handleLogoutClick}
             className="btn btn-ghost text-red-400 font-bold uppercase text-[10px] tracking-widest hover:bg-red-400/10"
           >
             LOG OUT
@@ -275,10 +302,49 @@ const AdminWindow: React.FC<Props> = ({ onBack }) => {
 
         {activeTab === 'settings' && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <SettingsScreen onBack={() => setActiveTab('operators')} />
+            <SettingsScreen 
+              ref={settingsRef}
+              onBack={() => setActiveTab('operators')} 
+              onDirtyChange={setSettingsDirty}
+            />
           </div>
         )}
       </div>
+
+      {/* Exit Confirmation Modal */}
+      {showExitConfirm && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-6 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-white/10 rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-6">
+            <div className="text-center space-y-2">
+              <div className="bg-amber-500/20 text-amber-500 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+              </div>
+              <h3 className="text-lg font-black uppercase tracking-widest text-white">Unsaved Changes</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">You have modified settings without saving. How would you like to proceed?</p>
+            </div>
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={() => handleConfirmExit(true)}
+                className="w-full py-4 bg-emerald-600 text-white font-bold rounded-2xl text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-emerald-900/20"
+              >
+                Save and Exit
+              </button>
+              <button 
+                onClick={() => handleConfirmExit(false)}
+                className="w-full py-4 bg-slate-800 text-white font-bold rounded-2xl text-[10px] uppercase tracking-widest active:scale-95 transition-all"
+              >
+                Exit without Saving
+              </button>
+              <button 
+                onClick={() => setShowExitConfirm(false)}
+                className="w-full py-4 bg-transparent text-slate-500 font-bold rounded-2xl text-[10px] uppercase tracking-widest hover:text-white transition-all"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -47,6 +47,7 @@ app.get('/api/get-settings', (req, res) => {
     telegramChatId: process.env.TELEGRAM_CHAT_ID || '',
     webhookUrl: process.env.GAS_WEBHOOK_URL || '',
     spreadsheetUrl: process.env.SPREADSHEET_URL || '',
+    settingsSyncUrl: process.env.SETTINGS_SYNC_URL || '',
     telegramBotWebhookUrl: '/api/webhook'
   });
 });

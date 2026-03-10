@@ -14,6 +14,7 @@ export interface AppSettings {
   telegramBotToken: string;
   telegramChatId: string;
   telegramBotWebhookUrl: string;
+  settingsSyncUrl: string;
 }
 
 const SETTINGS_KEY = 'radiance_dispatch_settings';
@@ -31,6 +32,7 @@ const defaultSettings: AppSettings = {
   telegramBotToken: '',
   telegramChatId: '',
   telegramBotWebhookUrl: '',
+  settingsSyncUrl: '',
 };
 
 export const settingsService = {
