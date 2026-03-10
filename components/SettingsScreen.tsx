@@ -16,6 +16,34 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
   const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [showLogs, setShowLogs] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const syncFromServer = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch('/api/get-settings');
+      if (!res.ok) throw new Error("Failed to fetch");
+      const serverSettings = await res.json();
+      
+      const newSettings = { 
+        ...settings, 
+        ...serverSettings,
+        // Only update if server has values
+        telegramBotToken: serverSettings.telegramBotToken || settings.telegramBotToken,
+        telegramChatId: serverSettings.telegramChatId || settings.telegramChatId,
+        webhookUrl: serverSettings.webhookUrl || settings.webhookUrl,
+        spreadsheetUrl: serverSettings.spreadsheetUrl || settings.spreadsheetUrl,
+      };
+      
+      setSettings(newSettings);
+      settingsService.saveSettings(newSettings);
+      triggerToast("Synced from Server");
+    } catch (e) {
+      triggerToast("Sync Failed");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const fetchLogs = async () => {
     try {
@@ -39,6 +67,11 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
       }
     };
     checkServer();
+
+    // Auto-sync if settings are empty
+    if (!settings.telegramBotToken || !settings.webhookUrl) {
+      syncFromServer();
+    }
   }, []);
 
   const updateSetting = (key: keyof AppSettings, value: any) => {
@@ -78,6 +111,26 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
   return (
     <div className="flex-1 flex flex-col bg-slate-900 overflow-hidden animate-in slide-in-from-right duration-300">
       <div className="flex-1 overflow-y-auto space-y-6 pb-20">
+        {/* Global Sync Section */}
+        <div className="bg-blue-600/10 border border-blue-500/20 rounded-2xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-600/20 text-blue-400 p-2 rounded-xl">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-white">Cloud Persistence</p>
+              <p className="text-[10px] text-slate-500">Sync settings across all devices</p>
+            </div>
+          </div>
+          <button 
+            onClick={syncFromServer}
+            disabled={isSyncing}
+            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isSyncing ? 'bg-slate-800 text-slate-600 animate-pulse' : 'bg-blue-600 text-white hover:bg-blue-500 active:scale-95'}`}
+          >
+            {isSyncing ? 'Syncing...' : 'Sync Now'}
+          </button>
+        </div>
+
         {/* Section: API Configuration */}
         <div>
           <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-3 ml-1">API Configuration</h3>

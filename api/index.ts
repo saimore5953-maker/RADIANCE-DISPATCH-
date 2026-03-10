@@ -34,8 +34,20 @@ app.get('/api/webhook', (req, res) => {
     config: {
       has_token: !!process.env.TELEGRAM_BOT_TOKEN,
       has_chat_id: !!process.env.TELEGRAM_CHAT_ID,
-      has_gas_url: !!process.env.GAS_WEBHOOK_URL
+      has_gas_url: !!process.env.GAS_WEBHOOK_URL,
+      has_spreadsheet: !!process.env.SPREADSHEET_URL
     }
+  });
+});
+
+// Endpoint to fetch global settings (for cross-device sync)
+app.get('/api/get-settings', (req, res) => {
+  res.json({
+    telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
+    telegramChatId: process.env.TELEGRAM_CHAT_ID || '',
+    webhookUrl: process.env.GAS_WEBHOOK_URL || '',
+    spreadsheetUrl: process.env.SPREADSHEET_URL || '',
+    telegramBotWebhookUrl: '/api/webhook'
   });
 });
 
