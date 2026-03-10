@@ -1,5 +1,4 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import cors from "cors";
 import multer from "multer";
 
@@ -75,7 +74,7 @@ app.post('/api/webhook', upload.single('excel'), async (req, res) => {
           });
           const gasResult: any = await gasRes.json();
           addLog(`GAS Hold Result: ${gasResult.ok ? 'Success' : 'Failed: ' + gasResult.message}`);
-        } catch (e) {
+        } catch (e: any) {
           addLog("GAS Hold Error: " + e.message);
         }
       } else {
@@ -237,22 +236,50 @@ app.post('/api/webhook', upload.single('excel'), async (req, res) => {
     res.send("ok");
   } catch (error: any) {
     addLog(`Server Error: ${error.message}`);
-    res.status(500).json({ ok: false, error: error.message });
+    res.status(500).json({ ok: false, error: error.message, stack: error.stack });
   }
 });
 
+// Global Error Handler
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error("Global Error:", err);
+  res.status(500).json({ 
+    ok: false, 
+    error: "Internal Server Error", 
+    message: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+  });
+});
+
 // Export for Vercel
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
 export default app;
 
-if (process.env.NODE_ENV !== "production") {
-  const vite = await createViteServer({
-    server: { middlewareMode: true },
-    appType: "spa",
-  });
-  app.use(vite.middlewares);
-} else {
-  app.use(express.static("dist"));
+// Vite middleware for development
+async function setupVite() {
+  if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+    try {
+      const { createServer: createViteServer } = await import("vite");
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } catch (e) {
+      console.error("Vite setup failed:", e);
+    }
+  } else {
+    app.use(express.static("dist"));
+  }
 }
+
+// Start Vite setup but don't block
+setupVite().catch(console.error);
 
 if (!process.env.VERCEL) {
   app.listen(PORT, "0.0.0.0", () => {
