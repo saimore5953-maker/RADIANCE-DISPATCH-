@@ -15,9 +15,11 @@ const addLog = (msg: string) => {
 // ------------------
 
 // --- CONFIGURATION ---
-let activeBotToken = process.env.TELEGRAM_BOT_TOKEN;
-let activeGasUrl = process.env.GAS_WEBHOOK_URL;
-const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+// IMPORTANT: On Vercel, these MUST be set in the Dashboard Environment Variables
+// because serverless functions are stateless and will "forget" values set at runtime.
+const getBotToken = (reqBody?: any) => reqBody?.bot_token || process.env.TELEGRAM_BOT_TOKEN;
+const getGasUrl = (reqBody?: any) => reqBody?.gas_url || process.env.GAS_WEBHOOK_URL;
+const getChatId = (reqBody?: any) => reqBody?.chat_id || process.env.TELEGRAM_CHAT_ID;
 // ---------------------
 
 app.use(cors());
@@ -30,55 +32,68 @@ app.get('/api/webhook', (req, res) => {
     time: new Date().toISOString(),
     logs: logs,
     config: {
-      has_token: !!activeBotToken,
-      has_chat_id: !!CHAT_ID,
-      has_gas_url: !!activeGasUrl
+      has_token: !!process.env.TELEGRAM_BOT_TOKEN,
+      has_chat_id: !!process.env.TELEGRAM_CHAT_ID,
+      has_gas_url: !!process.env.GAS_WEBHOOK_URL
     }
   });
 });
 
+// Endpoint to register webhook (Server-side to avoid CORS/Encoding issues)
+app.post('/api/setup-webhook', async (req, res) => {
+  try {
+    const { token, url, gas_url, chat_id } = req.body;
+    if (!token || !url) return res.status(400).json({ ok: false, error: "Missing token or url" });
+    
+    // Append credentials to URL for total statelessness
+    const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
+    urlObj.searchParams.set('token', token);
+    if (gas_url) urlObj.searchParams.set('gas', gas_url);
+    if (chat_id) urlObj.searchParams.set('chat', chat_id);
+    
+    const finalUrl = urlObj.toString();
+    
+    addLog(`Setting Webhook: ${finalUrl}`);
+    const tgRes = await fetch(`https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(finalUrl)}`);
+    const data = await tgRes.json();
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 // Unified endpoint for Telegram Webhooks AND Mobile App Dispatches
 app.post('/api/webhook', upload.single('excel'), async (req, res) => {
+  const update = req.body || {};
+  const token = (req.query.token as string) || getBotToken(update.data ? JSON.parse(update.data) : update);
+  const gas_url = (req.query.gas as string) || getGasUrl(update.data ? JSON.parse(update.data) : update);
+  const chat_id = (req.query.chat as string) || getChatId(update.data ? JSON.parse(update.data) : update);
+
   try {
-    addLog("Incoming Webhook Request");
+    addLog(`Webhook: ${req.headers['content-type']} | Body: ${!!req.body}`);
+    if (update.callback_query) addLog(`Callback: ${update.callback_query.data}`);
+    if (update.message) addLog(`Message: ${update.message.text?.substring(0, 20)}`);
     
-    // 1. MOBILE APP DISPATCH (Initial "Send to Telegram" click)
+    // 1. MOBILE APP DISPATCH
     if (req.body.data) {
-      addLog("Type: Mobile App Dispatch (Hold Workflow)");
       const data = JSON.parse(req.body.data);
       const excelFile = req.file;
       
-      const token = data.bot_token || activeBotToken;
-      const chat_id = data.chat_id || CHAT_ID;
-      const gas_url = data.gas_url || activeGasUrl;
-
-      // Update active credentials for future callbacks
-      if (token) activeBotToken = token;
-      if (gas_url) activeGasUrl = gas_url;
-
-      addLog(`Credentials: Token=${!!token}, ChatID=${!!chat_id}, GAS=${!!gas_url}`);
-
       if (!token || !chat_id) {
-        addLog("Error: Missing Credentials");
-        return res.status(400).json({ ok: false, error: "Telegram Bot Token or Chat ID not provided" });
+        return res.status(400).json({ ok: false, error: "Missing Telegram Credentials (Token/ChatID). Set them in Vercel Env Vars." });
       }
 
       // A. SEND TO GOOGLE SHEET (HOLD LIST)
       if (gas_url) {
-        addLog("Sending to GAS Hold List...");
         try {
-          const gasRes = await fetch(gas_url, {
+          await fetch(gas_url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...data, action: 'hold' })
           });
-          const gasResult: any = await gasRes.json();
-          addLog(`GAS Hold Result: ${gasResult.ok ? 'Success' : 'Failed: ' + gasResult.message}`);
         } catch (e: any) {
           addLog("GAS Hold Error: " + e.message);
         }
-      } else {
-        addLog("Warning: No GAS URL provided, skipping Hold List");
       }
 
       // B. SEND TO TELEGRAM
@@ -104,45 +119,35 @@ app.post('/api/webhook', upload.single('excel'), async (req, res) => {
         formData.append('parse_mode', 'HTML');
         formData.append('reply_markup', JSON.stringify(keyboard));
 
-        const tgRes = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, { method: 'POST', body: formData });
-        const tgData: any = await tgRes.json();
-        if (!tgData.ok) {
-          addLog(`Telegram Error: ${tgData.description}`);
-          throw new Error(tgData.description);
-        }
+        await fetch(`https://api.telegram.org/bot${token}/sendDocument`, { method: 'POST', body: formData });
       } else {
-        const tgRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ chat_id: chat_id, text: messageText, parse_mode: 'HTML', reply_markup: keyboard })
         });
-        const tgData: any = await tgRes.json();
-        if (!tgData.ok) {
-          addLog(`Telegram Error: ${tgData.description}`);
-          throw new Error(tgData.description);
-        }
       }
-      addLog("Telegram Message Sent Successfully");
       return res.json({ ok: true });
     }
 
     // 2. TELEGRAM UPDATES
-    const update: any = req.body;
-    
-    // Handle "Finalize Dispatch" Button Click
     if (update.callback_query) {
       const query = update.callback_query;
+      if (!token) {
+        console.error("Callback failed: No Bot Token found in Env Vars");
+        return res.send("ok");
+      }
+
       if (query.data.startsWith('finalize_')) {
         const dispatchId = query.data.replace('finalize_', '');
-        addLog(`Finalize Clicked for ID: ${dispatchId}`);
         
-        await fetch(`https://api.telegram.org/bot${activeBotToken}/answerCallbackQuery`, {
+        await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ callback_query_id: query.id })
         });
 
-        await fetch(`https://api.telegram.org/bot${activeBotToken}/sendMessage`, {
+        await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -161,38 +166,27 @@ app.post('/api/webhook', upload.single('excel'), async (req, res) => {
       const replyTo = update.message.reply_to_message;
       if (replyTo.text && replyTo.text.includes("Please enter Invoice Number")) {
         const invoiceNo = update.message.text.trim();
-        const promptText = replyTo.text;
-        
-        // Extract Dispatch ID from the prompt message
-        const idMatch = promptText.match(/Dispatch ID: ([\w-]+)/);
+        const idMatch = replyTo.text.match(/Dispatch ID: ([\w-]+)/);
         const dispatchId = idMatch ? idMatch[1] : null;
 
-        if (!dispatchId) {
-          addLog("Error: Could not find Dispatch ID in prompt");
-          return res.send("ok");
-        }
+        if (!dispatchId || !token) return res.send("ok");
 
         const originalMsg = replyTo.reply_to_message;
         if (!originalMsg) return res.send("ok");
 
-        if (!activeGasUrl) {
-          await fetch(`https://api.telegram.org/bot${activeBotToken}/sendMessage`, {
+        if (!gas_url) {
+          await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: update.message.chat.id, text: "❌ GAS Webhook URL not set" })
+            body: JSON.stringify({ chat_id: update.message.chat.id, text: "❌ GAS Webhook URL not set in Vercel Env Vars" })
           });
           return res.send("ok");
         }
 
-        addLog(`Finalizing ID ${dispatchId} with Invoice ${invoiceNo}...`);
-        const gasRes = await fetch(activeGasUrl, {
+        const gasRes = await fetch(gas_url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            dispatch_id: dispatchId,
-            invoice_no: invoiceNo,
-            action: 'finalize'
-          })
+          body: JSON.stringify({ dispatch_id: dispatchId, invoice_no: invoiceNo, action: 'finalize' })
         });
         const gasData: any = await gasRes.json();
 
@@ -212,22 +206,10 @@ app.post('/api/webhook', upload.single('excel'), async (req, res) => {
           if (originalMsg.caption) editPayload.caption = newText;
           else editPayload.text = newText;
 
-          await fetch(`https://api.telegram.org/bot${activeBotToken}/${editMethod}`, {
+          await fetch(`https://api.telegram.org/bot${token}/${editMethod}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(editPayload)
-          });
-          
-          await fetch(`https://api.telegram.org/bot${activeBotToken}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: update.message.chat.id, text: `✅ Success! Data moved to Main Sheet (No: ${gasData.dispatch_no})` })
-          });
-        } else {
-          await fetch(`https://api.telegram.org/bot${activeBotToken}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: update.message.chat.id, text: `❌ Finalization Failed: ${gasData.message}` })
           });
         }
       }
@@ -235,8 +217,8 @@ app.post('/api/webhook', upload.single('excel'), async (req, res) => {
 
     res.send("ok");
   } catch (error: any) {
-    addLog(`Server Error: ${error.message}`);
-    res.status(500).json({ ok: false, error: error.message, stack: error.stack });
+    console.error("Webhook Error:", error);
+    res.status(500).json({ ok: false, error: error.message });
   }
 });
 
@@ -254,7 +236,9 @@ app.use((err: any, req: any, res: any, next: any) => {
 // Export for Vercel
 export const config = {
   api: {
-    bodyParser: false,
+    bodyParser: {
+      sizeLimit: '10mb',
+    },
   },
 };
 

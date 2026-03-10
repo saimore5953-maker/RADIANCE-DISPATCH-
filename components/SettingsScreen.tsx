@@ -285,26 +285,69 @@ const SettingsScreen: React.FC<Props> = ({ onBack }) => {
                 </div>
               </div>
 
-              <button 
-                onClick={async () => {
-                  if (!settings.telegramBotToken) {
-                    alert("Please enter Bot Token first");
-                    return;
-                  }
-                  try {
-                    const webhookUrl = window.location.origin + '/api/webhook';
-                    const res = await fetch(`https://api.telegram.org/bot${settings.telegramBotToken}/setWebhook?url=${webhookUrl}`);
-                    const data = await res.json();
-                    if (data.ok) alert("✅ Webhook Registered Successfully! Buttons will now work.");
-                    else alert("❌ Failed: " + data.description);
-                  } catch (e) {
-                    alert("❌ Error: " + e.message);
-                  }
-                }}
-                className="w-full py-3 bg-blue-600/20 text-blue-400 border border-blue-500/30 font-bold rounded-xl text-[10px] uppercase tracking-widest hover:bg-blue-600/30 transition-all"
-              >
-                Register Webhook with Telegram
-              </button>
+              <div className="flex gap-2">
+                <button 
+                  onClick={async () => {
+                    if (!settings.telegramBotToken) {
+                      alert("Please enter Bot Token first");
+                      return;
+                    }
+                    try {
+                      console.log("Registering webhook...");
+                      const webhookUrl = window.location.origin + '/api/webhook';
+                      console.log("Webhook URL:", webhookUrl);
+                      
+                      const res = await fetch('/api/setup-webhook', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                          token: settings.telegramBotToken, 
+                          url: webhookUrl,
+                          gas_url: settings.webhookUrl,
+                          chat_id: settings.telegramChatId
+                        })
+                      });
+                      
+                      if (!res.ok) {
+                        const errorText = await res.text();
+                        console.error("Server responded with error:", errorText);
+                        alert(`❌ Server Error (${res.status}): ${errorText}`);
+                        return;
+                      }
+
+                      const data = await res.json();
+                      console.log("Webhook response:", data);
+                      
+                      if (data.ok) {
+                        alert("✅ Webhook Registered Successfully! Buttons will now work.");
+                      } else {
+                        alert("❌ Telegram Error: " + (data.description || data.error || "Unknown error"));
+                      }
+                    } catch (e: any) {
+                      console.error("Registration catch block:", e);
+                      alert("❌ Network/Client Error: " + e.message);
+                    }
+                  }}
+                  className="flex-1 py-3 bg-blue-600/20 text-blue-400 border border-blue-500/30 font-bold rounded-xl text-[10px] uppercase tracking-widest hover:bg-blue-600/30 transition-all"
+                >
+                  Register Webhook
+                </button>
+                <button 
+                  onClick={async () => {
+                    try {
+                      const res = await fetch('/api/webhook', { method: 'GET' });
+                      const data = await res.json();
+                      alert("✅ Server Status: " + JSON.stringify(data, null, 2));
+                    } catch (e: any) {
+                      alert("❌ Server Offline: " + e.message);
+                    }
+                  }}
+                  className="px-4 py-3 bg-slate-700/50 text-slate-400 border border-slate-600/30 font-bold rounded-xl text-[10px] uppercase tracking-widest hover:bg-slate-700 transition-all"
+                  title="Test Server Connection"
+                >
+                  Test
+                </button>
+              </div>
 
               <p className="text-[9px] text-slate-500 italic px-1 leading-relaxed">Ensure the bot is an admin in your group to send documents.</p>
             </div>
