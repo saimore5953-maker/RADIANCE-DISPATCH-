@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { settingsService, AppSettings } from '../services/settingsService';
+import { adminService } from '../services/adminService';
 
 interface Props {
   onBack: () => void;
@@ -192,6 +193,34 @@ const SettingsScreen = forwardRef<SettingsScreenHandle, Props>(({ onBack, onDirt
           <p className="text-[9px] text-slate-500 italic px-1 leading-relaxed">
             This URL should return JSON with: telegramBotToken, telegramChatId, webhookUrl, and spreadsheetUrl.
           </p>
+        </div>
+
+        {/* Section: Admin Security */}
+        <div>
+          <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-3 ml-1">Admin Security</h3>
+          <div className="bg-slate-800 rounded-2xl border border-white/5 overflow-hidden shadow-sm p-4 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-red-900/30 text-red-400 p-2 rounded-xl">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-white">Admin Access PIN</p>
+                <p className="text-[10px] text-slate-500 font-medium">Used to enter this Admin Window</p>
+              </div>
+            </div>
+            
+            <div>
+              <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1 ml-1">Current Admin PIN</label>
+              <input 
+                type="text"
+                maxLength={4}
+                value={settings.adminPin}
+                onChange={(e) => updateSetting('adminPin', e.target.value)}
+                className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-xs font-mono text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                placeholder="Default: 1234"
+              />
+            </div>
+          </div>
         </div>
 
         {/* Section: API Configuration */}
@@ -538,6 +567,27 @@ const SettingsScreen = forwardRef<SettingsScreenHandle, Props>(({ onBack, onDirt
               </label>
             </div>
 
+            <div className="p-4 flex items-center justify-between border-b border-white/5">
+              <div className="flex items-center gap-3">
+                <div className="bg-red-900/30 text-red-400 p-2 rounded-xl">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-white">Auto-Delete History</p>
+                  <p className="text-[10px] text-slate-500">Remove from history after Telegram upload</p>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  className="sr-only peer" 
+                  checked={settings.autoDeleteAfterUpload}
+                  onChange={(e) => updateSetting('autoDeleteAfterUpload', e.target.checked)}
+                />
+                <div className="w-11 h-6 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+
             <div className="p-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="bg-purple-900/30 text-purple-400 p-2 rounded-xl">
@@ -558,6 +608,44 @@ const SettingsScreen = forwardRef<SettingsScreenHandle, Props>(({ onBack, onDirt
                 <div className="w-11 h-6 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
               </label>
             </div>
+          </div>
+        </div>
+
+        {/* Section: Data Backup */}
+        <div>
+          <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-3 ml-1">Data Backup</h3>
+          <div className="bg-slate-800 rounded-2xl border border-white/5 overflow-hidden shadow-sm p-4 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-indigo-900/30 text-indigo-400 p-2 rounded-xl">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-white">Export Configuration</p>
+                <p className="text-[10px] text-slate-500 font-medium">Download all settings & master lists</p>
+              </div>
+            </div>
+            
+            <button 
+              onClick={() => {
+                const backup = {
+                  settings: settingsService.getSettings(),
+                  operators: adminService.getOperators(),
+                  customers: adminService.getCustomers(),
+                  timestamp: new Date().toISOString()
+                };
+                const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `radiance_backup_${new Date().toISOString().split('T')[0]}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                triggerToast("Backup Downloaded");
+              }}
+              className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-indigo-900/20"
+            >
+              Download JSON Backup
+            </button>
           </div>
         </div>
 

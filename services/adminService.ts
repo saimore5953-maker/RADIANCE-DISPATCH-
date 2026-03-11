@@ -1,4 +1,6 @@
 
+import { settingsService } from './settingsService';
+
 export interface Operator {
   id: string;
   name: string;
@@ -68,7 +70,8 @@ export const adminService = {
   },
 
   validateLogin(pin: string): Operator | 'ADMIN' | null {
-    if (pin === '1234') return 'ADMIN';
+    const settings = settingsService.getSettings();
+    if (pin === settings.adminPin) return 'ADMIN';
     const operators = this.getOperators();
     return operators.find(o => o.pin === pin) || null;
   }

@@ -15,6 +15,8 @@ export interface AppSettings {
   telegramChatId: string;
   telegramBotWebhookUrl: string;
   settingsSyncUrl: string;
+  adminPin: string;
+  autoDeleteAfterUpload: boolean;
 }
 
 const SETTINGS_KEY = 'radiance_dispatch_settings';
@@ -33,6 +35,8 @@ const defaultSettings: AppSettings = {
   telegramChatId: '',
   telegramBotWebhookUrl: '',
   settingsSyncUrl: '',
+  adminPin: '1234',
+  autoDeleteAfterUpload: false,
 };
 
 export const settingsService = {

@@ -7,9 +7,8 @@ import { PARSE_RULES } from "../constants";
  * Uses local processing to avoid API quotas and enable airplane-mode scanning.
  */
 
-// We use esm.sh to load Tesseract locally in a web environment
-// In a true Flutter build, this would map to google_mlkit_text_recognition
-import Tesseract from 'https://esm.sh/tesseract.js@5.1.1';
+// We use Tesseract for local OCR
+import Tesseract from 'tesseract.js';
 
 export async function performLocalOCR(base64Image: string): Promise<OCRResult> {
   try {

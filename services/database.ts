@@ -118,6 +118,13 @@ class DispatchDatabase {
     });
   }
 
+  async updateDispatchStatus(dispatchId: string, status: DispatchStatus): Promise<void> {
+    const dispatch = await this.getDispatchById(dispatchId);
+    if (!dispatch) return;
+    dispatch.status = status;
+    await this.updateDispatch(dispatch);
+  }
+
   async markAsSynced(dispatchId: string): Promise<void> {
     const dispatch = await this.getDispatchById(dispatchId);
     if (!dispatch) return;

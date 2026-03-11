@@ -1,6 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { adminService, Operator, Customer } from '../services/adminService';
+import { dbService } from '../services/database';
+import { Dispatch } from '../types';
 import SettingsScreen, { SettingsScreenHandle } from './SettingsScreen';
 
 interface Props {
@@ -8,10 +10,19 @@ interface Props {
 }
 
 const AdminWindow: React.FC<Props> = ({ onBack }) => {
-  const [activeTab, setActiveTab] = useState<'operators' | 'customers' | 'settings'>('operators');
+  const [activeTab, setActiveTab] = useState<'operators' | 'customers' | 'settings' | 'history'>('operators');
   const [operators, setOperators] = useState<Operator[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [dispatches, setDispatches] = useState<Dispatch[]>([]);
+  
+  // Dirty state tracking
+  const [operatorsDirty, setOperatorsDirty] = useState(false);
+  const [customersDirty, setCustomersDirty] = useState(false);
   const [settingsDirty, setSettingsDirty] = useState(false);
+  const [historyDirty, setHistoryDirty] = useState(false);
+  
+  const [dispatchesToDelete, setDispatchesToDelete] = useState<Set<string>>(new Set());
+  
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const settingsRef = useRef<SettingsScreenHandle>(null);
   
@@ -26,7 +37,38 @@ const AdminWindow: React.FC<Props> = ({ onBack }) => {
   useEffect(() => {
     setOperators(adminService.getOperators());
     setCustomers(adminService.getCustomers());
+    loadHistory();
   }, []);
+
+  const loadHistory = async () => {
+    const data = await dbService.getAllDispatches();
+    setDispatches(data.sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime()));
+  };
+
+  const isAdminDirty = operatorsDirty || customersDirty || settingsDirty || historyDirty;
+
+  const handleSaveAll = async () => {
+    if (operatorsDirty) {
+      adminService.saveOperators(operators);
+      setOperatorsDirty(false);
+    }
+    if (customersDirty) {
+      adminService.saveCustomers(customers);
+      setCustomersDirty(false);
+    }
+    if (settingsDirty && settingsRef.current) {
+      settingsRef.current.save();
+    }
+    if (historyDirty) {
+      for (const id of dispatchesToDelete) {
+        await dbService.discardDispatch(id);
+      }
+      setDispatchesToDelete(new Set());
+      setHistoryDirty(false);
+      await loadHistory();
+    }
+    alert("All Admin Data Saved Successfully");
+  };
 
   const handleSaveOperator = () => {
     let updated;
@@ -37,10 +79,17 @@ const AdminWindow: React.FC<Props> = ({ onBack }) => {
       if (operators.find(o => o.id === newOp.id)) return alert("ID already exists");
       updated = [...operators, { ...newOp }];
     }
-    adminService.saveOperators(updated);
     setOperators(updated);
+    setOperatorsDirty(true);
     setEditingOperator(null);
     setNewOp({ id: '', name: '', pin: '' });
+  };
+
+  const handleDeleteOperator = (id: string) => {
+    if (!confirm("Are you sure you want to remove this operator?")) return;
+    const updated = operators.filter(o => o.id !== id);
+    setOperators(updated);
+    setOperatorsDirty(true);
   };
 
   const handleSaveCustomer = () => {
@@ -51,8 +100,8 @@ const AdminWindow: React.FC<Props> = ({ onBack }) => {
       if (!newCust.name || !newCust.location || !newCust.transport) return alert("All fields required");
       updated = [...customers, { id: Date.now().toString(), ...newCust }];
     }
-    adminService.saveCustomers(updated);
     setCustomers(updated);
+    setCustomersDirty(true);
     setEditingCustomer(null);
     setNewCust({ name: '', location: '', transport: '' });
   };
@@ -60,21 +109,39 @@ const AdminWindow: React.FC<Props> = ({ onBack }) => {
   const handleDeleteCustomer = (id: string) => {
     if (!confirm("Are you sure you want to remove this customer?")) return;
     const updated = customers.filter(c => c.id !== id);
-    adminService.saveCustomers(updated);
     setCustomers(updated);
+    setCustomersDirty(true);
+  };
+
+  const toggleDispatchDelete = (id: string) => {
+    const newSet = new Set(dispatchesToDelete);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setDispatchesToDelete(newSet);
+    setHistoryDirty(newSet.size > 0);
+  };
+
+  const handleClearAllHistory = () => {
+    if (!confirm("Mark ALL history for deletion? Changes will be applied when you click SAVE ALL DATA.")) return;
+    const allIds = dispatches.map(d => d.dispatch_id);
+    setDispatchesToDelete(new Set(allIds));
+    setHistoryDirty(true);
   };
 
   const handleLogoutClick = () => {
-    if (settingsDirty) {
+    if (isAdminDirty) {
       setShowExitConfirm(true);
     } else {
       onBack();
     }
   };
 
-  const handleConfirmExit = (save: boolean) => {
-    if (save && settingsRef.current) {
-      settingsRef.current.save();
+  const handleConfirmExit = async (save: boolean) => {
+    if (save) {
+      await handleSaveAll();
     }
     setShowExitConfirm(false);
     onBack();
@@ -90,14 +157,12 @@ const AdminWindow: React.FC<Props> = ({ onBack }) => {
           </h2>
         </div>
         <div className="flex-none flex items-center gap-2">
-          {activeTab === 'settings' && (
-            <button 
-              onClick={() => settingsRef.current?.save()}
-              className={`btn btn-ghost text-emerald-400 font-bold uppercase text-[10px] tracking-widest hover:bg-emerald-400/10 ${settingsDirty ? 'animate-pulse bg-emerald-400/5' : ''}`}
-            >
-              SAVE SETTINGS
-            </button>
-          )}
+          <button 
+            onClick={handleSaveAll}
+            className={`btn btn-ghost text-emerald-400 font-bold uppercase text-[10px] tracking-widest hover:bg-emerald-400/10 ${isAdminDirty ? 'animate-pulse bg-emerald-400/5' : ''}`}
+          >
+            SAVE ALL DATA
+          </button>
           <button 
             onClick={handleLogoutClick}
             className="btn btn-ghost text-red-400 font-bold uppercase text-[10px] tracking-widest hover:bg-red-400/10"
@@ -122,6 +187,12 @@ const AdminWindow: React.FC<Props> = ({ onBack }) => {
           Customers
         </button>
         <button 
+          onClick={() => setActiveTab('history')} 
+          className={`flex-1 py-3 text-[9px] font-bold uppercase tracking-widest transition-all rounded-lg ${activeTab === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+        >
+          History
+        </button>
+        <button 
           onClick={() => setActiveTab('settings')} 
           className={`flex-1 py-3 text-[9px] font-bold uppercase tracking-widest transition-all rounded-lg ${activeTab === 'settings' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
         >
@@ -141,12 +212,20 @@ const AdminWindow: React.FC<Props> = ({ onBack }) => {
                       <p className="font-bold text-sm text-white">{op.name}</p>
                       <p className="text-[9px] text-slate-500 font-mono uppercase tracking-widest">ID: {op.id} • PIN: {op.pin}</p>
                     </div>
-                    <button 
-                      onClick={() => setEditingOperator(op)}
-                      className="p-2 text-blue-400 hover:bg-blue-400/10 rounded-lg transition-all"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                    </button>
+                    <div className="flex gap-1">
+                      <button 
+                        onClick={() => setEditingOperator(op)}
+                        className="p-2 text-blue-400 hover:bg-blue-400/10 rounded-lg transition-all"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteOperator(op.id)}
+                        className="p-2 text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -295,6 +374,59 @@ const AdminWindow: React.FC<Props> = ({ onBack }) => {
                     </button>
                   )}
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'history' && (
+          <div className="space-y-4">
+            <div className="bg-slate-800 rounded-2xl p-5 border border-white/5 shadow-sm">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Dispatch History</h3>
+                <button 
+                  onClick={handleClearAllHistory}
+                  className="text-[8px] font-bold text-red-400 uppercase tracking-widest hover:underline"
+                >
+                  Mark All for Deletion
+                </button>
+              </div>
+              <div className="space-y-2">
+                {dispatches.length === 0 ? (
+                  <div className="text-center py-10 text-slate-500 text-[10px] font-bold uppercase tracking-widest">No history found</div>
+                ) : (
+                  dispatches.map(d => (
+                    <div 
+                      key={d.dispatch_id} 
+                      className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
+                        dispatchesToDelete.has(d.dispatch_id) 
+                          ? 'bg-red-900/20 border-red-500/50 opacity-60' 
+                          : 'bg-slate-900/50 border-white/5'
+                      }`}
+                    >
+                      <div className="max-w-[70%]">
+                        <p className="font-bold text-sm text-white truncate">{d.customer_name}</p>
+                        <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest truncate">
+                          {d.dispatch_id} • {new Date(d.start_time).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <button 
+                        onClick={() => toggleDispatchDelete(d.dispatch_id)}
+                        className={`p-2 rounded-lg transition-all ${
+                          dispatchesToDelete.has(d.dispatch_id) 
+                            ? 'text-emerald-400 hover:bg-emerald-400/10' 
+                            : 'text-red-400 hover:bg-red-400/10'
+                        }`}
+                      >
+                        {dispatchesToDelete.has(d.dispatch_id) ? (
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                        ) : (
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        )}
+                      </button>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>

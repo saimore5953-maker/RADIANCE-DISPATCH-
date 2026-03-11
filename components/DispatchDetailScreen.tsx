@@ -181,6 +181,7 @@ const DispatchDetailScreen: React.FC<Props> = ({
         }
 
         await dbService.markAsSynced(dispatch.dispatch_id);
+        await dbService.updateDispatchStatus(dispatch.dispatch_id, DispatchStatus.COMPLETED);
         
         const updated = await dbService.getDispatchById(dispatch.dispatch_id);
         if (updated && isMounted.current) {
@@ -217,6 +218,27 @@ const DispatchDetailScreen: React.FC<Props> = ({
       );
       if (isMounted.current) setIsTelegramSent(true);
       showToast("Sent to Telegram!", "success");
+
+      // Mark as COMPLETED if it was a DRAFT
+      if (dispatch.status === DispatchStatus.DRAFT) {
+        await dbService.updateDispatchStatus(dispatch.dispatch_id, DispatchStatus.COMPLETED);
+        load();
+      }
+
+      // Auto-delete from history if setting is enabled
+      if (settings.autoDeleteAfterUpload) {
+        setTimeout(async () => {
+          try {
+            await dbService.discardDispatch(dispatch.dispatch_id);
+            if (isMounted.current) {
+              showToast("Auto-deleted from history", "success");
+              onBack(); // Go back as the record is gone
+            }
+          } catch (e) {
+            console.error("Auto-delete failed", e);
+          }
+        }, 1500);
+      }
     } catch (err: any) {
       logger.error('Telegram send failed', err);
       showToast(`Telegram failed: ${err.message}`, "error");
